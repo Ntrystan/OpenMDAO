@@ -158,7 +158,7 @@ class ApproximationScheme(object):
             ordered_wrt_iter = list(system._jac_wrt_iter())
             colored_start = colored_end = 0
             for abs_wrt, cstart, cend, _, cinds, _ in ordered_wrt_iter:
-                if wrt_matches is None or abs_wrt in wrt_matches:
+                if abs_wrt in wrt_matches:
                     colored_end += cend - cstart
                     ccol2jcol[colored_start:colored_end] = np.arange(cstart, cend, dtype=INT_DTYPE)
                     if is_total and abs_wrt in out_slices:
@@ -169,7 +169,7 @@ class ApproximationScheme(object):
                         ccol2vcol[colored_start:colored_end] = rng
                     colored_start = colored_end
 
-        row_var_sizes = {v: sz for v, sz in zip(coloring._row_vars, coloring._row_var_sizes)}
+        row_var_sizes = dict(zip(coloring._row_vars, coloring._row_var_sizes))
         row_map = np.empty(coloring._shape[0], dtype=INT_DTYPE)
         abs2prom = system._var_allprocs_abs2prom['output']
 
@@ -204,10 +204,7 @@ class ApproximationScheme(object):
         for cols, nzrows in coloring.color_nonzero_iter('fwd'):
             nzrows = [row_map[r] for r in nzrows]
             jaccols = cols if wrt_matches is None else ccol2jcol[cols]
-            if is_total:
-                vcols = ccol2vcol[cols]
-            else:
-                vcols = jaccols
+            vcols = ccol2vcol[cols] if is_total else jaccols
             vec_ind_list = get_input_idx_split(vcols, inputs, outputs, use_full_cols, is_total)
             self._colored_approx_groups.append((data, jaccols, vec_ind_list, nzrows))
 
@@ -247,11 +244,7 @@ class ApproximationScheme(object):
                 meta = self._wrt_meta[wrt]
                 if coloring is not None and 'coloring' in meta:
                     continue
-                if vec is system._inputs:
-                    slices = in_slices
-                else:
-                    slices = out_slices
-
+                slices = in_slices if vec is system._inputs else out_slices
                 data = self._get_approx_data(system, wrt, meta)
                 directional = meta['directional'] or self._totals_directions
 
@@ -287,11 +280,7 @@ class ApproximationScheme(object):
                         in_idx = [list(in_idx)]
                         vec_idx = [list(vec_idx)]
 
-                if directional:
-                    self._nruns_uncolored += 1
-                else:
-                    self._nruns_uncolored += end - start
-
+                self._nruns_uncolored += 1 if directional else end - start
                 if self._totals_directional_mode == 'rev':
                     wrts_directional.append(wrt)
                     data_directional = data
@@ -356,8 +345,9 @@ class ApproximationScheme(object):
         total = system.pathname == ''
 
         if total:
-            tot_result = np.zeros(sum([end - start for _, start, end, _, _
-                                       in system._jac_of_iter()]))
+            tot_result = np.zeros(
+                sum(end - start for _, start, end, _, _ in system._jac_of_iter())
+            )
             scratch = tot_result.copy()
         else:
             scratch = np.empty(len(system._outputs))
@@ -383,22 +373,21 @@ class ApproximationScheme(object):
                 # run the finite difference
                 result = self._run_point(system, vec_ind_list, data, results_array, total_or_semi)
 
-                if par_fd_w_serial_model or not use_parallel_fd:
-                    result = self._transform_result(result)
-
-                    if mult != 1.0:
-                        result *= mult
-
-                    if total:
-                        result = self._get_total_result(result, tot_result)
-
-                    tosend = (fd_count, result)
-
-                else:  # parallel model (some vars are remote)
+                if not par_fd_w_serial_model and use_parallel_fd:
                     raise NotImplementedError("simul approx coloring with parallel FD/CS is "
                                               "only supported currently when using "
                                               "a serial model, i.e., when "
                                               "num_par_fd == number of MPI procs.")
+
+                result = self._transform_result(result)
+
+                if mult != 1.0:
+                    result *= mult
+
+                if total:
+                    result = self._get_total_result(result, tot_result)
+
+                tosend = (fd_count, result)
 
             fd_count += 1
 
@@ -485,7 +474,7 @@ class ApproximationScheme(object):
 
         # Clean vector for results (copy of the outputs or resids)
         results_array = system._outputs.asarray(copy=True) if total_or_semi \
-            else system._residuals.asarray(copy=True)
+                else system._residuals.asarray(copy=True)
         use_parallel_fd = system._num_par_fd > 1 and (system._full_comm is not None and
                                                       system._full_comm.size > 1)
         num_par_fd = system._num_par_fd if use_parallel_fd else 1
@@ -545,11 +534,10 @@ class ApproximationScheme(object):
 
                 # check if it's time to collect parallel FD columns
                 if use_parallel_fd:
-                    if fd_count == nruns or fd_count % num_par_fd == 0:
-                        allres = mycomm.allgather(tosend)
-                        tosend = None
-                    else:
+                    if fd_count != nruns and fd_count % num_par_fd != 0:
                         continue
+                    allres = mycomm.allgather(tosend)
+                    tosend = None
                 else:
                     allres = [tosend]
 

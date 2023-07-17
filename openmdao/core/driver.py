@@ -291,9 +291,11 @@ class Driver(object):
         # Determine if any design variables are discrete.
         self._designvars_discrete = [name for name, meta in self._designvars.items()
                                      if meta['source'] in model._discrete_outputs]
-        if not self.supports['integer_design_vars'] and len(self._designvars_discrete) > 0:
-            msg = "Discrete design variables are not supported by this driver: "
-            msg += '.'.join(self._designvars_discrete)
+        if not self.supports['integer_design_vars'] and self._designvars_discrete:
+            msg = (
+                "Discrete design variables are not supported by this driver: "
+                + '.'.join(self._designvars_discrete)
+            )
             raise RuntimeError(msg)
 
         self._remote_dvs = remote_dv_dict = {}
@@ -404,9 +406,7 @@ class Driver(object):
                     if vsrc in obj_set:
                         remote_obj_dict[vname] = (owner, sz)
 
-        self._remote_responses = self._remote_cons.copy()
-        self._remote_responses.update(self._remote_objs)
-
+        self._remote_responses = self._remote_cons | self._remote_objs
         # set up simultaneous deriv coloring
         if coloring_mod._use_total_sparsity:
             # reset the coloring
@@ -441,33 +441,34 @@ class Driver(object):
 
         These options are case insensitive.
         """
-        if self.options['invalid_desvar_behavior'] != 'ignore':
-            invalid_desvar_data = []
-            for var, meta in self._designvars.items():
-                _val = self._problem().get_val(var, units=meta['units'], get_remote=True)
-                val = np.array([_val]) if np.ndim(_val) == 0 else _val  # Handle discrete desvars
-                idxs = meta['indices']() if meta['indices'] else None
-                flat_idxs = meta['flat_indices']
-                scaler = meta['scaler'] or 1.
-                adder = meta['adder'] or 0.
-                lower = meta['lower'] / scaler - adder
-                upper = meta['upper'] / scaler - adder
-                flat_val = val.ravel()[idxs] if flat_idxs else val[idxs].ravel()
+        if self.options['invalid_desvar_behavior'] == 'ignore':
+            return
+        invalid_desvar_data = []
+        for var, meta in self._designvars.items():
+            _val = self._problem().get_val(var, units=meta['units'], get_remote=True)
+            val = np.array([_val]) if np.ndim(_val) == 0 else _val  # Handle discrete desvars
+            idxs = meta['indices']() if meta['indices'] else None
+            flat_idxs = meta['flat_indices']
+            scaler = meta['scaler'] or 1.
+            adder = meta['adder'] or 0.
+            lower = meta['lower'] / scaler - adder
+            upper = meta['upper'] / scaler - adder
+            flat_val = val.ravel()[idxs] if flat_idxs else val[idxs].ravel()
 
-                if (flat_val < lower).any() or (flat_val > upper).any():
-                    invalid_desvar_data.append((var, val, lower, upper))
-            if invalid_desvar_data:
-                s = 'The following design variable initial conditions are out of their ' \
+            if (flat_val < lower).any() or (flat_val > upper).any():
+                invalid_desvar_data.append((var, val, lower, upper))
+        if invalid_desvar_data:
+            s = 'The following design variable initial conditions are out of their ' \
                     'specified bounds:'
-                for var, val, lower, upper in invalid_desvar_data:
-                    s += f'\n  {var}\n    val: {val.ravel()}' \
+            for var, val, lower, upper in invalid_desvar_data:
+                s += f'\n  {var}\n    val: {val.ravel()}' \
                          f'\n    lower: {lower}\n    upper: {upper}'
-                s += '\nSet the initial value of the design variable to a valid value or set ' \
+            s += '\nSet the initial value of the design variable to a valid value or set ' \
                      'the driver option[\'invalid_desvar_behavior\'] to \'ignore\'.'
-                if self.options['invalid_desvar_behavior'] == 'raise':
-                    raise ValueError(s)
-                else:
-                    issue_warning(s, category=DriverWarning)
+            if self.options['invalid_desvar_behavior'] == 'raise':
+                raise ValueError(s)
+            else:
+                issue_warning(s, category=DriverWarning)
 
     def _get_vars_to_record(self, recording_options):
         """
@@ -504,11 +505,11 @@ class Driver(object):
         if recording_options['record_outputs']:
             myoutputs = [n for n, prom in abs2prom.items() if check_path(prom, incl, excl)]
 
-            model_outs = model._outputs
-
             if model._var_discrete['output']:
                 # if we have discrete outputs then residual name set doesn't match output one
                 if recording_options['record_residuals']:
+                    model_outs = model._outputs
+
                     myresiduals = [n for n in myoutputs if model_outs._contains_abs(n)]
             elif recording_options['record_residuals']:
                 myresiduals = myoutputs
@@ -531,14 +532,11 @@ class Driver(object):
                 myinputs = [n for n in model._var_allprocs_abs2prom['input']
                             if check_path(n, incl, excl)]
 
-        # sort lists to ensure that vars are iterated over in the same order on all procs
-        vars2record = {
+        return {
             'input': sorted(myinputs),
             'output': sorted(myoutputs),
-            'residual': sorted(myresiduals)
+            'residual': sorted(myresiduals),
         }
-
-        return vars2record
 
     def _setup_recording(self):
         """
@@ -606,10 +604,11 @@ class Driver(object):
                     val = val[indices.flat()]
             else:
                 if owner == comm.rank:
-                    if indices is None:
-                        val = get(src_name, flat=True).copy()
-                    else:
-                        val = get(src_name, flat=True)[indices.as_array()]
+                    val = (
+                        get(src_name, flat=True).copy()
+                        if indices is None
+                        else get(src_name, flat=True)[indices.as_array()]
+                    )
                 else:
                     if indices is not None:
                         size = indices.indexed_src_size
@@ -633,27 +632,26 @@ class Driver(object):
             else:
                 val = local_val
 
+        elif src_name in model._discrete_outputs:
+            val = model._discrete_outputs[src_name]
+            if name in self._designvars_discrete:
+                # At present, only integers are supported by OpenMDAO drivers.
+                # We check the values here.
+                if not ((np.isscalar(val) and isinstance(val, (int, np.integer))) or
+                        (isinstance(val, np.ndarray) and np.issubdtype(val[0], np.integer))):
+                    if np.isscalar(val):
+                        suffix = f"A value of type '{type(val).__name__}' was specified."
+                    elif isinstance(val, np.ndarray):
+                        suffix = f"An array of type '{val.dtype.name}' was specified."
+                    else:
+                        suffix = ''
+                    raise ValueError("Only integer scalars or ndarrays are supported as values "
+                                     "for discrete variables when used as a design variable. "
+                                     + suffix)
+        elif indices is None:
+            val = get(src_name, flat=True).copy()
         else:
-            if src_name in model._discrete_outputs:
-                val = model._discrete_outputs[src_name]
-                if name in self._designvars_discrete:
-                    # At present, only integers are supported by OpenMDAO drivers.
-                    # We check the values here.
-                    if not ((np.isscalar(val) and isinstance(val, (int, np.integer))) or
-                            (isinstance(val, np.ndarray) and np.issubdtype(val[0], np.integer))):
-                        if np.isscalar(val):
-                            suffix = f"A value of type '{type(val).__name__}' was specified."
-                        elif isinstance(val, np.ndarray):
-                            suffix = f"An array of type '{val.dtype.name}' was specified."
-                        else:
-                            suffix = ''
-                        raise ValueError("Only integer scalars or ndarrays are supported as values "
-                                         "for discrete variables when used as a design variable. "
-                                         + suffix)
-            elif indices is None:
-                val = get(src_name, flat=True).copy()
-            else:
-                val = get(src_name, flat=True)[indices.as_array()]
+            val = get(src_name, flat=True)[indices.as_array()]
 
         if self._has_scaling and driver_scaling:
             # Scale design variable values
@@ -767,10 +765,7 @@ class Driver(object):
                 loc_idxs = loc_idxs()  # don't use indexer here
             else:
                 loc_idxs = meta['indices']
-                if loc_idxs is None:
-                    loc_idxs = _full_slice
-                else:
-                    loc_idxs = loc_idxs()
+                loc_idxs = _full_slice if loc_idxs is None else loc_idxs()
                 dist_idxs = _full_slice
 
             if set_remote:
@@ -975,7 +970,7 @@ class Driver(object):
                                                                    problem.comm.rank == 0)
 
         if debug_print:
-            header = 'Driver total derivatives for iteration: ' + str(self.iter_count)
+            header = f'Driver total derivatives for iteration: {str(self.iter_count)}'
             print(header)
             print(len(header) * '-' + '\n')
 
@@ -1101,10 +1096,7 @@ class Driver(object):
         self._coloring_info['orders'] = orders
         self._coloring_info['perturb_size'] = perturb_size
         self._coloring_info['min_improve_pct'] = min_improve_pct
-        if self._coloring_info['static'] is None:
-            self._coloring_info['dynamic'] = True
-        else:
-            self._coloring_info['dynamic'] = False
+        self._coloring_info['dynamic'] = self._coloring_info['static'] is None
         self._coloring_info['coloring'] = None
         self._coloring_info['show_summary'] = show_summary
         self._coloring_info['show_sparsity'] = show_sparsity
@@ -1130,8 +1122,9 @@ class Driver(object):
 
             self._coloring_info['coloring'] = None
         else:
-            raise RuntimeError("Driver '%s' does not support simultaneous derivatives." %
-                               self._get_name())
+            raise RuntimeError(
+                f"Driver '{self._get_name()}' does not support simultaneous derivatives."
+            )
 
     def _setup_tot_jac_sparsity(self, coloring=None):
         """
@@ -1170,11 +1163,12 @@ class Driver(object):
             return coloring
 
         if static is coloring_mod._STD_COLORING_FNAME or isinstance(static, str):
-            if static is coloring_mod._STD_COLORING_FNAME:
-                fname = self._get_total_coloring_fname()
-            else:
-                fname = static
-            print("loading total coloring from file %s" % fname)
+            fname = (
+                self._get_total_coloring_fname()
+                if static is coloring_mod._STD_COLORING_FNAME
+                else static
+            )
+            print(f"loading total coloring from file {fname}")
             coloring = info['coloring'] = coloring_mod.Coloring.load(fname)
             info.update(coloring._meta)
             return coloring
@@ -1259,8 +1253,7 @@ class Driver(object):
             return
 
         if not MPI or rank == 0:
-            header = 'Driver debug print for iter coord: {}'.format(
-                self._recording_iter.get_formatted_iteration_coordinate())
+            header = f'Driver debug print for iter coord: {self._recording_iter.get_formatted_iteration_coordinate()}'
             print(header)
             print(len(header) * '-')
 
@@ -1344,24 +1337,26 @@ class Driver(object):
         Coloring or None
             Coloring object, possible loaded from a file or dynamically generated, or None
         """
-        if c_mod._use_total_sparsity:
+        if not c_mod._use_total_sparsity:
+            return
+        if self._coloring_info['coloring'] is None and self._coloring_info['dynamic']:
+            coloring = c_mod.dynamic_total_coloring(
+                self, run_model=run_model, fname=self._get_total_coloring_fname()
+            )
+        else:
             coloring = None
-            if self._coloring_info['coloring'] is None and self._coloring_info['dynamic']:
-                coloring = c_mod.dynamic_total_coloring(self, run_model=run_model,
-                                                        fname=self._get_total_coloring_fname())
-
-            if coloring is not None:
-                # if the improvement wasn't large enough, don't use coloring
-                pct = coloring._solves_info()[-1]
-                info = self._coloring_info
-                if info['min_improve_pct'] > pct:
-                    info['coloring'] = info['static'] = None
-                    msg = f"Coloring was deactivated.  Improvement of {pct:.1f}% was less " \
+        if coloring is not None:
+            # if the improvement wasn't large enough, don't use coloring
+            pct = coloring._solves_info()[-1]
+            info = self._coloring_info
+            if info['min_improve_pct'] > pct:
+                info['coloring'] = info['static'] = None
+                msg = f"Coloring was deactivated.  Improvement of {pct:.1f}% was less " \
                           f"than min allowed ({info['min_improve_pct']:.1f}%)."
-                    issue_warning(msg, prefix=self.msginfo, category=DerivativesWarning)
-                    self._coloring_info['coloring'] = coloring = None
+                issue_warning(msg, prefix=self.msginfo, category=DerivativesWarning)
+                self._coloring_info['coloring'] = coloring = None
 
-            return coloring
+        return coloring
 
 
 class SaveOptResult(object):

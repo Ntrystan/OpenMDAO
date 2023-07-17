@@ -50,8 +50,9 @@ def _generate_fd_coeff(form, order, system):
         fd_form = FD_COEFFS[form, order]
     except KeyError:
         # TODO: Automatically generate requested form and store in dict.
-        raise ValueError('{}: Finite Difference form="{}" and order={} are not '
-                         'supported'.format(system.msginfo, form, order))
+        raise ValueError(
+            f'{system.msginfo}: Finite Difference form="{form}" and order={order} are not supported'
+        )
     return fd_form
 
 
@@ -116,9 +117,9 @@ class FiniteDifference(ApproximationScheme):
             if form in DEFAULT_ORDER:
                 options['order'] = DEFAULT_ORDER[options['form']]
             else:
-                raise ValueError("{}: '{}' is not a valid form of finite difference; must be "
-                                 "one of {}".format(system.msginfo, form,
-                                                    list(DEFAULT_ORDER.keys())))
+                raise ValueError(
+                    f"{system.msginfo}: '{form}' is not a valid form of finite difference; must be one of {list(DEFAULT_ORDER.keys())}"
+                )
 
             step_calc = options['step_calc']
             step_calcs = ['abs', 'rel', 'rel_legacy', 'rel_avg', 'rel_element']
@@ -181,25 +182,21 @@ class FiniteDifference(ApproximationScheme):
             else:
                 var_local = False
 
-            if var_local:
-                if step_calc == 'rel_legacy':
+            if step_calc == 'rel_legacy':
+                if var_local:
                     step *= np.linalg.norm(wrt_val)
 
-                    if step < minimum_step:
-                        step = minimum_step
-
-                elif step_calc == 'rel_avg' or step_calc == 'rel':
+                    step = max(step, minimum_step)
+            elif step_calc in ['rel_avg', 'rel']:
+                if var_local:
                     step *= np.sum(np.abs(wrt_val)) / len(wrt_val)
 
-                    if step < minimum_step:
-                        step = minimum_step
+                    step = max(step, minimum_step)
+            elif var_local:  # 'rel_element'
+                step = np.abs(wrt_val) * step
 
-                else:  # 'rel_element'
-                    step = np.abs(wrt_val) * step
-
-                    idx_zero = np.where(step < minimum_step)
-                    if idx_zero:
-                        step[idx_zero] = minimum_step
+                if idx_zero := np.where(step < minimum_step):
+                    step[idx_zero] = minimum_step
 
         if step_calc == 'rel_element':
             step_divide = 1.0 / step
@@ -390,11 +387,7 @@ class FiniteDifference(ApproximationScheme):
             if vec is not None and idxs is not None:
 
                 # Support rel_element stepsizing
-                if rel_element:
-                    local_delta = delta[idxs - idx_start[0]]
-                else:
-                    local_delta = delta
-
+                local_delta = delta[idxs - idx_start[0]] if rel_element else delta
                 vec.iadd(local_delta, idxs)
 
         if total:

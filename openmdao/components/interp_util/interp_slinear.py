@@ -173,6 +173,7 @@ class InterpLinearSemi(InterpAlgorithmSemi):
 
         h = 1.0 / (grid[idx + 1] - grid[idx])
 
+        d_value = None
         if subtables is not None:
             # Interpolate between values that come from interpolating the subtables in the
             # subsequent dimensions.
@@ -190,7 +191,6 @@ class InterpLinearSemi(InterpAlgorithmSemi):
             dslope_dsub = (dx1 - dx0) * h
             derivs[1:] = dx0 + (x[0] - grid[idx]) * dslope_dsub
 
-            d_value = None
             if self._compute_d_dvalues:
                 dvalue0, idx0 = dvalue0
                 dvalue1, idx1 = dvalue1
@@ -209,7 +209,6 @@ class InterpLinearSemi(InterpAlgorithmSemi):
             values = self.values
             slope = (values[idx + 1] - values[idx]) * h
 
-            d_value = None
             if self._compute_d_dvalues:
                 d_value = np.empty(2, dtype=x.dtype)
                 d_value[1] = h * (x - grid[idx])
@@ -301,11 +300,7 @@ class Interp1DSlinear(InterpAlgorithmFixed):
         idx = idx[0]
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         # Extrapolation
         n = len(grid)
         if idx == n - 1:
@@ -384,11 +379,7 @@ class Interp1DSlinear(InterpAlgorithmFixed):
         i_x = idx[0]
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         # extrapolate low
         i_x[i_x == -1] = 0
 
@@ -400,9 +391,8 @@ class Interp1DSlinear(InterpAlgorithmFixed):
             self.coeffs = set()
             self.vec_coeff = np.empty((nx, 2), dtype=dtype)
 
-        needed = set([item for item in i_x])
-        uncached = needed.difference(self.coeffs)
-        if len(uncached) > 0:
+        needed = set(list(i_x))
+        if uncached := needed.difference(self.coeffs):
             unc = np.array(list(uncached))
             uncached_idx = (unc, )
             a = self.compute_coeffs_vectorized(uncached_idx, dtype)
@@ -532,11 +522,7 @@ class Interp2DSlinear(InterpAlgorithmFixed):
         idx_key = tuple(idx)
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         if idx_key not in self.coeffs:
             self.coeffs[idx_key] = self.compute_coeffs(idx, dtype)
         a = self.coeffs[idx_key]
@@ -637,11 +623,7 @@ class Interp2DSlinear(InterpAlgorithmFixed):
         i_x, i_y = idx
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         # extrapolate low
         i_x[i_x == -1] = 0
         i_y[i_y == -1] = 0
@@ -655,9 +637,8 @@ class Interp2DSlinear(InterpAlgorithmFixed):
             self.coeffs = set()
             self.vec_coeff = np.empty((nx, ny, 4), dtype=dtype)
 
-        needed = set([item for item in zip(i_x, i_y)])
-        uncached = needed.difference(self.coeffs)
-        if len(uncached) > 0:
+        needed = set(list(zip(i_x, i_y)))
+        if uncached := needed.difference(self.coeffs):
             unc = np.array(list(uncached))
             uncached_idx = (unc[:, 0], unc[:, 1])
             a = self.compute_coeffs_vectorized(uncached_idx, dtype)
@@ -800,19 +781,15 @@ class Interp3DSlinear(InterpAlgorithmFixed):
         idx_key = tuple(idx)
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         if idx_key not in self.coeffs:
             self.coeffs[idx_key] = self.compute_coeffs(idx, dtype)
         a = self.coeffs[idx_key]
 
         val = a[0] + \
-            (a[1] + (a[4] + a[7] * z) * y) * x + \
-            a[2] * y + \
-            (a[3] + a[5] * x + a[6] * y) * z
+                (a[1] + (a[4] + a[7] * z) * y) * x + \
+                a[2] * y + \
+                (a[3] + a[5] * x + a[6] * y) * z
 
         d_x = np.empty((3, ), dtype=dtype)
         d_x[0] = a[1] + y * a[4] + z * (a[5] + y * a[7])
@@ -976,11 +953,7 @@ class Interp3DSlinear(InterpAlgorithmFixed):
         i_x, i_y, i_z = idx
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         # extrapolate low
         i_x[i_x == -1] = 0
         i_y[i_y == -1] = 0
@@ -996,9 +969,8 @@ class Interp3DSlinear(InterpAlgorithmFixed):
             self.coeffs = set()
             self.vec_coeff = np.empty((nx, ny, nz, 8), dtype=dtype)
 
-        needed = set([item for item in zip(i_x, i_y, i_z)])
-        uncached = needed.difference(self.coeffs)
-        if len(uncached) > 0:
+        needed = set(list(zip(i_x, i_y, i_z)))
+        if uncached := needed.difference(self.coeffs):
             unc = np.array(list(uncached))
             uncached_idx = (unc[:, 0], unc[:, 1], unc[:, 2])
             a = self.compute_coeffs_vectorized(uncached_idx, dtype)
@@ -1007,9 +979,9 @@ class Interp3DSlinear(InterpAlgorithmFixed):
         a = self.vec_coeff[i_x, i_y, i_z, :]
 
         val = a[:, 0] + \
-            (a[:, 1] + (a[:, 4] + a[:, 7] * z) * y) * x + \
-            a[:, 2] * y + \
-            (a[:, 3] + a[:, 5] * x + a[:, 6] * y) * z
+                (a[:, 1] + (a[:, 4] + a[:, 7] * z) * y) * x + \
+                a[:, 2] * y + \
+                (a[:, 3] + a[:, 5] * x + a[:, 6] * y) * z
 
         d_x = np.empty((vec_size, 3), dtype=dtype)
         d_x[:, 0] = a[:, 1] + y * a[:, 4] + z * (a[:, 5] + y * a[:, 7])

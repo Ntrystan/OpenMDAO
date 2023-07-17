@@ -186,11 +186,8 @@ class TestMetaModelSemiStructured(unittest.TestCase):
                                                  params[1]['values'],
                                                  params[2]['values']])))
 
-        j = 0
-        for param in params:
+        for j, param in enumerate(params):
             comp.add_input(param['name'], grid[:, j])
-            j += 1
-
         for out in outs:
             comp.add_output(out['name'], training_data=outs[0]['values'].flatten())
 
@@ -235,11 +232,8 @@ class TestMetaModelSemiStructured(unittest.TestCase):
                                                  params[1]['values'],
                                                  params[2]['values']])))
 
-        j = 0
-        for param in params:
+        for j, param in enumerate(params):
             comp.add_input(param['name'], grid[:, j])
-            j += 1
-
         for out in outs:
             comp.add_output(out['name'], training_data=outs[0]['values'].flatten())
 
@@ -284,11 +278,8 @@ class TestMetaModelSemiStructured(unittest.TestCase):
                                                  params[1]['values'],
                                                  params[2]['values']])))
 
-        j = 0
-        for param in params:
+        for j, param in enumerate(params):
             comp.add_input(param['name'], grid[:, j])
-            j += 1
-
         for out in outs:
             comp.add_output(out['name'], training_data=outs[0]['values'].flatten())
 
@@ -333,11 +324,8 @@ class TestMetaModelSemiStructured(unittest.TestCase):
                                                  params[1]['values'],
                                                  params[2]['values']])))
 
-        j = 0
-        for param in params:
+        for j, param in enumerate(params):
             comp.add_input(param['name'], grid[:, j])
-            j += 1
-
         for out in outs:
             comp.add_output(out['name'], training_data=outs[0]['values'].flatten())
 
@@ -367,8 +355,10 @@ class TestMetaModelSemiStructured(unittest.TestCase):
         model = prob.model
         model.add_subsystem('comp', comp)
 
-        msg = "Size mismatch: training data for 'f' is length 3, but" + \
-            f" data for 'x' is length 4."
+        msg = (
+            "Size mismatch: training data for 'f' is length 3, but"
+            + " data for 'x' is length 4."
+        )
         with self.assertRaisesRegex(ValueError, msg):
             prob.setup()
 

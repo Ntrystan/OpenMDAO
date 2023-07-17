@@ -79,12 +79,8 @@ if pycodestyle:
                         'row': self.line_offset + line_number, 'col': offset + 1,
                         'code': code, 'text': text,
                     })
-                    if line_number > len(self.lines):
-                        line = ''
-                    else:
-                        line = self.lines[line_number - 1]
-                    err_strings.append(line.rstrip())
-                    err_strings.append(re.sub(r'\S', ' ', line[:offset]) + '^')
+                    line = '' if line_number > len(self.lines) else self.lines[line_number - 1]
+                    err_strings.extend((line.rstrip(), re.sub(r'\S', ' ', line[:offset]) + '^'))
             return err_strings
 
         def get_file_results(self):
@@ -112,13 +108,15 @@ class LintTestCase(unittest.TestCase):
                 failures.append('')
 
         if failures:
-            self.fail('{} PEP 8 Failure(s):\n'.format(report.total_errors) + '\n'.join(failures))
+            self.fail(f'{report.total_errors} PEP 8 Failure(s):\n' + '\n'.join(failures))
 
     @unittest.skipUnless(pydocstyle, "requires 'pydocstyle', install openmdao[test]")
     def test_pep257(self):
-        failures = [str(fail) for fail in pydocstyle.check(_get_files(), ignore=ignores['pep257']) ]
-        if failures:
-            self.fail('{} PEP 257 Failure(s):\n'.format(len(failures)) + '\n'.join(failures))
+        if failures := [
+            str(fail)
+            for fail in pydocstyle.check(_get_files(), ignore=ignores['pep257'])
+        ]:
+            self.fail(f'{len(failures)} PEP 257 Failure(s):\n' + '\n'.join(failures))
 
 
 if __name__ == "__main__":

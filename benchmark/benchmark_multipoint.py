@@ -57,9 +57,7 @@ class Summer(om.ExplicitComponent):
         self.add_output('total', shape=1)
 
     def compute(self, inputs, outputs):
-        tot = 0
-        for i in range(self.size):
-            tot += inputs['y%d'%i]
+        tot = sum(inputs['y%d'%i] for i in range(self.size))
         outputs['total'] = tot
 
 
@@ -77,7 +75,7 @@ class MultiPoint(om.Group):
         for i,(a,s) in enumerate(zip(self.adders, self.scalars)):
             c_name = 'p%d'%i
             self.add_subsystem(c_name, Point(a,s))
-            self.connect(c_name+'.f2','aggregate.y%d'%i)
+            self.connect(f'{c_name}.f2', 'aggregate.y%d'%i)
 
         self.add_subsystem('aggregate', Summer(size))
 
@@ -97,21 +95,21 @@ class BM(unittest.TestCase):
         return prob
 
     def benchmark_setup_2K(self):
-        for i in range(3):
+        for _ in range(3):
             p = self._setup_bm(2000)
             p.final_setup()
 
     def benchmark_setup_1K(self):
-        for i in range(3):
+        for _ in range(3):
             p = self._setup_bm(1000)
             p.final_setup()
 
     def benchmark_run_2K(self):
-        for i in range(3):
+        for _ in range(3):
             p = self._setup_bm(2000)
             p.run_model()
 
     def benchmark_run_1K(self):
-        for i in range(3):
+        for _ in range(3):
             p = self._setup_bm(1000)
             p.run_model()

@@ -278,12 +278,11 @@ class ExplicitComponent(Component):
                     if new_disc_outs:
                         for name, val in new_disc_outs.items():
                             self._discrete_outputs[name] = val
+            elif self._discrete_inputs or self._discrete_outputs:
+                self.compute(self._inputs, self._outputs,
+                             self._discrete_inputs, self._discrete_outputs)
             else:
-                if self._discrete_inputs or self._discrete_outputs:
-                    self.compute(self._inputs, self._outputs,
-                                 self._discrete_inputs, self._discrete_outputs)
-                else:
-                    self.compute(self._inputs, self._outputs)
+                self.compute(self._inputs, self._outputs)
 
     def _apply_nonlinear(self):
         """
@@ -306,7 +305,7 @@ class ExplicitComponent(Component):
         """
         Compute outputs. The model is assumed to be in a scaled state.
         """
-        with Recording(self.pathname + '._solve_nonlinear', self.iter_count, self):
+        with Recording(f'{self.pathname}._solve_nonlinear', self.iter_count, self):
             with self._unscaled_context(outputs=[self._outputs], residuals=[self._residuals]):
                 self._residuals.set_val(0.0)
                 self._compute_wrapper()
@@ -405,9 +404,7 @@ class ExplicitComponent(Component):
                 try:
                     # handle identity subjacs (output_or_resid wrt itself)
                     if isinstance(J, DictionaryJacobian):
-                        d_out_names = d_outputs._names
-
-                        if d_out_names:
+                        if d_out_names := d_outputs._names:
                             rflat = d_residuals._abs_get_val
                             oflat = d_outputs._abs_get_val
                             subjacs_empty = len(self._subjacs_info) == 0
@@ -487,11 +484,10 @@ class ExplicitComponent(Component):
                 else:
                     for key, val in self.comm.bcast(None, root=0):
                         self._jacobian[key] = val
+            elif self._discrete_inputs:
+                self.compute_partials(self._inputs, self._jacobian, self._discrete_inputs)
             else:
-                if self._discrete_inputs:
-                    self.compute_partials(self._inputs, self._jacobian, self._discrete_inputs)
-                else:
-                    self.compute_partials(self._inputs, self._jacobian)
+                self.compute_partials(self._inputs, self._jacobian)
 
     def _linearize(self, jac=None, sub_do_ln=False):
         """

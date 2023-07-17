@@ -1815,7 +1815,7 @@ class TestFunctionRegistrationColoring(unittest.TestCase):
     def setUp(self):
         np.random.seed(11)
         self.startdir = os.getcwd()
-        self.tempdir = tempfile.mkdtemp(prefix=self.__class__.__name__ + '_')
+        self.tempdir = tempfile.mkdtemp(prefix=f'{self.__class__.__name__}_')
         os.chdir(self.tempdir)
 
     def tearDown(self):
@@ -1884,7 +1884,7 @@ class TestExecCompParameterized(unittest.TestCase):
 
     @parameterized.expand(itertools.product([
       func_name for func_name in _expr_dict if func_name not in ('np', 'numpy', '__builtins__')
-    ]), name_func=lambda f, n, p: 'test_exec_comp_value_' + '_'.join(a for a in p.args))
+    ]), name_func=lambda f, n, p: 'test_exec_comp_value_' + '_'.join(p.args))
     def test_exec_comp_value(self, f):
         test_data = _ufunc_test_data[f]
 
@@ -1940,7 +1940,7 @@ class TestExecCompParameterized(unittest.TestCase):
 
     @parameterized.expand(itertools.product([
       func_name for func_name in _expr_dict if func_name not in ('np', 'numpy', '__builtins__')
-    ]), name_func=lambda f, n, p: 'test_exec_comp_jac_' + '_'.join(a for a in p.args))
+    ]), name_func=lambda f, n, p: 'test_exec_comp_jac_' + '_'.join(p.args))
     def test_exec_comp_jac(self, f):
         test_data = _ufunc_test_data[f]
 

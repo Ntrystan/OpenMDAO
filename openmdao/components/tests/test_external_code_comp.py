@@ -31,14 +31,8 @@ def mach_residual(Mach, area_ratio_target):
 
 
 def mach_solve(area_ratio, super_sonic=False):
-    if super_sonic:
-        initial_guess = 4
-    else:
-        initial_guess = .1
-
-    mach = fsolve(func=mach_residual, x0=initial_guess, args=(area_ratio,))[0]
-
-    return mach
+    initial_guess = 4 if super_sonic else .1
+    return fsolve(func=mach_residual, x0=initial_guess, args=(area_ratio,))[0]
 
 
 class TestExternalCodeComp(unittest.TestCase):
@@ -133,8 +127,7 @@ class TestExternalCodeComp(unittest.TestCase):
         try:
             self.prob.run_model()
         except RuntimeError as exc:
-            self.assertTrue('Traceback' in str(exc),
-                            "no traceback found in '%s'" % str(exc))
+            self.assertTrue('Traceback' in str(exc), f"no traceback found in '{str(exc)}'")
             self.assertEqual(self.extcode.return_code, 1)
         else:
             self.fail('Expected RuntimeError')
@@ -152,10 +145,11 @@ class TestExternalCodeComp(unittest.TestCase):
         try:
             self.prob.run_model()
         except om.AnalysisError as err:
-            self.assertTrue("delay must be >= 0" in str(err),
-                            "expected 'delay must be >= 0' to be in '%s'" % str(err))
-            self.assertTrue('Traceback' in str(err),
-                            "no traceback found in '%s'" % str(err))
+            self.assertTrue(
+                "delay must be >= 0" in str(err),
+                f"expected 'delay must be >= 0' to be in '{str(err)}'",
+            )
+            self.assertTrue('Traceback' in str(err), f"no traceback found in '{str(err)}'")
         else:
             self.fail("AnalysisError expected")
 
@@ -182,8 +176,10 @@ class TestExternalCodeComp(unittest.TestCase):
         try:
             self.prob.run_model()
         except RuntimeError as err:
-            self.assertTrue("return_code = 7" in str(err),
-                            "expected 'return_code = 7' to be in '%s'" % str(err))
+            self.assertTrue(
+                "return_code = 7" in str(err),
+                f"expected 'return_code = 7' to be in '{str(err)}'",
+            )
         else:
             self.fail("RuntimeError expected")
 
@@ -229,8 +225,10 @@ class TestExternalCodeComp(unittest.TestCase):
         # Check to see if output file contains the env var value
         with open(os.path.join(self.tempdir, 'extcode.out'), 'r') as out:
             file_contents = out.read()
-        self.assertTrue('SOME_ENV_VAR_VALUE' in file_contents,
-                        "'SOME_ENV_VAR_VALUE' missing from '%s'" % file_contents)
+        self.assertTrue(
+            'SOME_ENV_VAR_VALUE' in file_contents,
+            f"'SOME_ENV_VAR_VALUE' missing from '{file_contents}'",
+        )
 
 
 class TestExternalCodeCompArgs(unittest.TestCase):
@@ -241,7 +239,6 @@ class TestExternalCodeCompArgs(unittest.TestCase):
 
         self.assertTrue(extcode.options['poll_delay'] == 999)
 
-        # check subclass kwargs are also passed to options
         class MyComp(om.ExternalCodeComp):
             def initialize(self):
                 self.options.declare('my_arg', 'foo', desc='subclass option')
@@ -255,7 +252,7 @@ class TestExternalCodeCompArgs(unittest.TestCase):
         extcode_opts = set(extcode.options._dict.keys())
         my_comp_opts = set(my_comp.options._dict.keys())
 
-        self.assertEqual(my_comp_opts.difference(extcode_opts), set(('my_arg',)))
+        self.assertEqual(my_comp_opts.difference(extcode_opts), {'my_arg'})
 
 
 class ParaboloidExternalCodeComp(om.ExternalCodeComp):
@@ -278,7 +275,9 @@ class ParaboloidExternalCodeComp(om.ExternalCodeComp):
         #     sys.executable, 'extcode_paraboloid.py', self.input_file, self.output_file
         # ]
 
-        self.options['command'] = ('python extcode_paraboloid.py {} {}').format(self.input_file, self.output_file)
+        self.options[
+            'command'
+        ] = f'python extcode_paraboloid.py {self.input_file} {self.output_file}'
 
     def compute(self, inputs, outputs):
         x = inputs['x']
@@ -534,6 +533,9 @@ class TestExternalCodeImplicitCompFeature(unittest.TestCase):
 
     def test_simple_external_code_implicit_comp(self):
 
+
+
+
         class MachExternalCodeComp(om.ExternalCodeImplicitComp):
 
             def initialize(self):
@@ -568,8 +570,8 @@ class TestExternalCodeImplicitCompFeature(unittest.TestCase):
             def apply_nonlinear(self, inputs, outputs, residuals):
                 with open(self.input_file, 'w') as input_file:
                     input_file.write('residuals\n')
-                    input_file.write('{}\n'.format(inputs['area_ratio'][0]))
-                    input_file.write('{}\n'.format(outputs['mach'][0]))
+                    input_file.write(f"{inputs['area_ratio'][0]}\n")
+                    input_file.write(f"{outputs['mach'][0]}\n")
 
                 # the parent apply_nonlinear function actually runs the external code
                 super().apply_nonlinear(inputs, outputs, residuals)
@@ -582,8 +584,8 @@ class TestExternalCodeImplicitCompFeature(unittest.TestCase):
             def solve_nonlinear(self, inputs, outputs):
                 with open(self.input_file, 'w') as input_file:
                     input_file.write('outputs\n')
-                    input_file.write('{}\n'.format(inputs['area_ratio'][0]))
-                    input_file.write('{}\n'.format(self.options['super_sonic']))
+                    input_file.write(f"{inputs['area_ratio'][0]}\n")
+                    input_file.write(f"{self.options['super_sonic']}\n")
                 # the parent apply_nonlinear function actually runs the external code
                 super().solve_nonlinear(inputs, outputs)
 
@@ -591,6 +593,7 @@ class TestExternalCodeImplicitCompFeature(unittest.TestCase):
                 with open(self.output_file, 'r') as output_file:
                     mach = float(output_file.read())
                 outputs['mach'] = mach
+
 
         group = om.Group()
         mach_comp = group.add_subsystem('comp', MachExternalCodeComp(), promotes=['*'])

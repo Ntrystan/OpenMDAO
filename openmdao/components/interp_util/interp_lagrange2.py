@@ -66,16 +66,10 @@ class InterpLagrange2(InterpAlgorithm):
         subtable = self.subtable
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         # Extrapolate high
         ngrid = len(grid)
-        if idx > ngrid - 3:
-            idx = ngrid - 3
-
+        idx = min(idx, ngrid - 3)
         derivs = np.empty(len(x), dtype=dtype)
 
         xx1 = x[0] - grid[idx]
@@ -121,8 +115,8 @@ class InterpLagrange2(InterpAlgorithm):
             q3 = values[..., idx + 2] / (c13 * c23)
 
         derivs[..., 0] = q1 * (2.0 * x[0] - grid[idx + 1] - grid[idx + 2]) - \
-            q2 * (2.0 * x[0] - grid[idx] - grid[idx + 2]) + \
-            q3 * (2.0 * x[0] - grid[idx] - grid[idx + 1])
+                q2 * (2.0 * x[0] - grid[idx] - grid[idx + 2]) + \
+                q3 * (2.0 * x[0] - grid[idx] - grid[idx + 1])
 
         return xx3 * (q1 * xx2 - q2 * xx1) + q3 * xx1 * xx2, derivs, None, None
 
@@ -192,16 +186,10 @@ class InterpLagrange2Semi(InterpAlgorithmSemi):
         extrap = flag != 0
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         # Extrapolate high
         ngrid = len(grid)
-        if idx > ngrid - 3:
-            idx = ngrid - 3
-
+        idx = min(idx, ngrid - 3)
         derivs = np.empty(len(x), dtype=dtype)
 
         if subtables is not None:
@@ -241,6 +229,7 @@ class InterpLagrange2Semi(InterpAlgorithmSemi):
         c13 = grid[idx] - grid[idx + 2]
         c23 = grid[idx + 1] - grid[idx + 2]
 
+        d_value = None
         if subtables is not None:
 
             derivs = np.empty(len(dx0) + 1, dtype=dtype)
@@ -255,7 +244,6 @@ class InterpLagrange2Semi(InterpAlgorithmSemi):
 
             derivs[1:] = xx3 * (dq1_dsub * xx2 - dq2_dsub * xx1) + dq3_dsub * xx1 * xx2
 
-            d_value = None
             if self._compute_d_dvalues:
                 dvalue0, idx0 = dvalue0
                 dvalue1, idx1 = dvalue1
@@ -280,7 +268,6 @@ class InterpLagrange2Semi(InterpAlgorithmSemi):
 
             derivs = np.empty(1, dtype=dtype)
 
-            d_value = None
             if self._compute_d_dvalues:
                 d_value = np.empty(3, dtype=dtype)
                 d_value[0] = xx3 * xx2 / (c12 * c13)
@@ -291,8 +278,8 @@ class InterpLagrange2Semi(InterpAlgorithmSemi):
                            [self._idx[idx], self._idx[idx + 1], self._idx[idx + 2]])
 
         derivs[0] = q1 * (xx2 + xx3) - \
-            q2 * (xx1 + xx3) + \
-            q3 * (xx1 + xx2)
+                q2 * (xx1 + xx3) + \
+                q3 * (xx1 + xx2)
 
         return xx3 * (q1 * xx2 - q2 * xx1) + q3 * xx1 * xx2, derivs, d_value, extrap
 
@@ -403,11 +390,7 @@ class Interp3DLagrange2(InterpAlgorithmFixed):
         idx = (i_x, i_y, i_z)
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x.dtype
         if idx not in self.coeffs:
             self.coeffs[idx] = self.compute_coeffs(idx, dtype)
         a = self.coeffs[idx]
@@ -530,14 +513,7 @@ class Interp3DLagrange2(InterpAlgorithmFixed):
 
         all_val = values[i_x: i_x + 3, i_y: i_y + 3, i_z: i_z + 3]
 
-        # There are 27 coefficients to compute, and each of them is a sum of 27 terms. These come
-        # from multiplying the expression for lagrange interpolation, the  core of which is:
-        # (x-x1)(x-x2)(x-x3)(y-y1)(y-y2)(y-y3)(z-z1)(z-z2)(z-z3)
-        # and expressing it in terms of powers of x, y, and z.
-        # This can efficiently be done in a single call to einsum.
-        a = np.einsum("mi,nj,pk,ijk->mnp", termx, termy, termz, all_val)
-
-        return a
+        return np.einsum("mi,nj,pk,ijk->mnp", termx, termy, termz, all_val)
 
     def interpolate_vectorized(self, x_vec, idx):
         """
@@ -576,19 +552,14 @@ class Interp3DLagrange2(InterpAlgorithmFixed):
         i_z[i_z > nz - 3] = nz - 3
 
         # Complex Step
-        if self.values.dtype == complex:
-            dtype = self.values.dtype
-        else:
-            dtype = x_vec.dtype
-
+        dtype = self.values.dtype if self.values.dtype == complex else x_vec.dtype
         if self.vec_coeff is None:
             self.coeffs = set()
             grid = self.grid
             self.vec_coeff = np.empty((nx, ny, nz, 3, 3, 3), dtype=dtype)
 
         needed = set(zip(i_x, i_y, i_z))
-        uncached = needed.difference(self.coeffs)
-        if len(uncached) > 0:
+        if uncached := needed.difference(self.coeffs):
             unc = np.array(list(uncached))
             uncached_idx = (unc[:, 0], unc[:, 1], unc[:, 2])
             a = self.compute_coeffs_vectorized(uncached_idx, dtype)

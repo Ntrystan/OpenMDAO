@@ -125,7 +125,7 @@ class MetaModelSemiStructuredComp(ExplicitComponent):
                     # Training datasets are all the same length, so grab the first.
                     break
                 training_data = np.ones(n_train)
-            super().add_input("%s_train" % name, val=training_data, **kwargs)
+            super().add_input(f"{name}_train", val=training_data, **kwargs)
 
         elif training_data is None:
             msg = f"Training data is required for output '{name}'."
@@ -146,10 +146,10 @@ class MetaModelSemiStructuredComp(ExplicitComponent):
                 size2 = len(data)
                 if size2 != size:
                     msg = f"Size mismatch: training data for '{name}' is length {size2}, but" + \
-                        f" data for '{self.pnames[0]}' is length {size}."
+                            f" data for '{self.pnames[0]}' is length {size}."
                     raise ValueError(msg)
 
-        grid = np.array([col for col in self.training_inputs.values()]).T
+        grid = np.array(list(self.training_inputs.values())).T
 
         for name, train_data in self.training_outputs.items():
             self.interps[name] = InterpNDSemi(grid, train_data, method=interp_method,
@@ -175,7 +175,7 @@ class MetaModelSemiStructuredComp(ExplicitComponent):
         for name in self._var_rel_names['output']:
             self._declare_partials(of=name, wrt=pnames, dct=dct)
             if self.options['training_data_gradients']:
-                self._declare_partials(of=name, wrt="%s_train" % name, dct={'dependent': True})
+                self._declare_partials(of=name, wrt=f"{name}_train", dct={'dependent': True})
 
         # The scipy methods do not support complex step.
         if self.options['method'].startswith('scipy'):
@@ -196,7 +196,7 @@ class MetaModelSemiStructuredComp(ExplicitComponent):
         for out_name, interp in self.interps.items():
             if self.options['training_data_gradients']:
                 # Training point values may have changed every time we compute.
-                interp.values = inputs["%s_train" % out_name]
+                interp.values = inputs[f"{out_name}_train"]
                 interp._compute_d_dvalues = True
 
             try:

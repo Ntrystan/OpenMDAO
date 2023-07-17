@@ -163,10 +163,7 @@ class ExplicitFuncComp(ExplicitComponent):
                 j = np.empty((osize, isize), dtype=float)
                 cstart = cend = 0
                 for i, a in zip(argidxs, jac_reverse(func, argnums, tangents)(*invals)):
-                    if isinstance(invals[i], np.ndarray):
-                        cend += invals[i].size
-                    else:  # must be a scalar
-                        cend += 1
+                    cend += invals[i].size if isinstance(invals[i], np.ndarray) else 1
                     a = np.asarray(a)
                     if a.ndim < 2:
                         j[:, cstart:cend] = a.reshape((a.size, 1))

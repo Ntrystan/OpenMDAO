@@ -157,9 +157,7 @@ class InterpAlgorithm(object):
 
             inc += inc
 
-        if high > highbound:
-            high = highbound
-
+        high = min(high, highbound)
         while x > grid[high]:
             last_index = high
             high += inc
@@ -427,9 +425,7 @@ class InterpAlgorithmFixed(object):
 
             inc += inc
 
-        if high > highbound:
-            high = highbound
-
+        high = min(high, highbound)
         while x > grid[high]:
             last_index = high
             high += inc
@@ -642,7 +638,7 @@ class InterpAlgorithmSemi(object):
             subtables = []
             i_pt = grid[0, 0]
             if idx is None:
-                idx = [item for item in range(len(values))]
+                idx = list(range(len(values)))
 
             i0, i1 = 0, 1
             sub_idx = [idx[0]]
@@ -767,9 +763,7 @@ class InterpAlgorithmSemi(object):
 
             inc += inc
 
-        if high > highbound:
-            high = highbound
-
+        high = min(high, highbound)
         while x > grid[high]:
             last_index = high
             high += inc

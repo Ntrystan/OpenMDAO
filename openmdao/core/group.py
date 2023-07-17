@@ -62,14 +62,13 @@ class _PromotesInfo(object):
     def __init__(self, src_indices=None, flat=None, src_shape=None, promoted_from='', prom=None):
         self.flat = flat
         self.src_shape = src_shape
-        if src_indices is not None:
-            if isinstance(src_indices, Indexer):
-                self.src_indices = src_indices
-                self.src_indices.set_src_shape(self.src_shape)
-            else:
-                self.src_indices = indexer(src_indices, src_shape=self.src_shape, flat_src=flat)
-        else:
+        if src_indices is None:
             self.src_indices = None
+        elif isinstance(src_indices, Indexer):
+            self.src_indices = src_indices
+            self.src_indices.set_src_shape(self.src_shape)
+        else:
+            self.src_indices = indexer(src_indices, src_shape=self.src_shape, flat_src=flat)
         self.promoted_from = promoted_from  # pathname of promoting system
         self.prom = prom  # local promoted name of input
 
@@ -295,21 +294,16 @@ class Group(System):
 
         if units is not None:
             if not isinstance(units, str):
-                raise TypeError('%s: The units argument should be a str or None' % self.msginfo)
+                raise TypeError(f'{self.msginfo}: The units argument should be a str or None')
             meta['units'] = simplify_unit(units, msginfo=self.msginfo)
 
         if src_shape is not None:
             meta['src_shape'] = src_shape
 
-        if self._static_mode:
-            dct = self._static_group_inputs
-        else:
-            dct = self._group_inputs
-
+        dct = self._static_group_inputs if self._static_mode else self._group_inputs
         if name in dct:
             old = dct[name][0]
-            overlap = set(old).intersection(meta)
-            if overlap:
+            if overlap := set(old).intersection(meta):
                 issue_warning(f"Setting input defaults for input '{name}' which "
                               f"override previously set defaults for {sorted(overlap)}.",
                               prefix=self.msginfo, category=PromotionWarning)
@@ -331,11 +325,7 @@ class Group(System):
         (set, set)
             Sets of output and input variables.
         """
-        if excl_sub is None:
-            cache_key = None
-        else:
-            cache_key = excl_sub.pathname
-
+        cache_key = None if excl_sub is None else excl_sub.pathname
         try:
             iovars, excl = self._scope_cache[cache_key]
 
@@ -415,13 +405,14 @@ class Group(System):
                 src_indices = meta_in['src_indices']
 
                 if src_indices is not None:
-                    if not (np.ndim(ref) == 0 and np.ndim(ref0) == 0):
+                    if np.ndim(ref) != 0 or np.ndim(ref0) != 0:
                         # TODO: if either ref or ref0 are not scalar and the output is
                         # distributed, we need to do a scatter
                         # to obtain the values needed due to global src_indices
                         if meta_out['distributed']:
-                            raise RuntimeError("{}: vector scalers with distrib vars "
-                                               "not supported yet.".format(self.msginfo))
+                            raise RuntimeError(
+                                f"{self.msginfo}: vector scalers with distrib vars not supported yet."
+                            )
 
                         if not src_indices._flat_src:
                             src_indices = _flatten_src_indices(src_indices, meta_in['shape'],
@@ -525,13 +516,12 @@ class Group(System):
             Problem level metadata.
         """
         super()._setup_procs(pathname, comm, mode, prob_meta)
-        self._setup_procs_finished = False
-
         nproc = comm.size
 
+        self._setup_procs_finished = False
         if self._num_par_fd > 1:
-            info = self._coloring_info
             if comm.size > 1:
+                info = self._coloring_info
                 # if approx_totals has been declared, or there is an approx coloring, setup par FD
                 if self._owns_approx_jac or info['dynamic'] or info['static'] is not None:
                     comm = self._setup_par_fd_procs(comm)
@@ -541,7 +531,7 @@ class Group(System):
                     raise RuntimeError(msg)
             elif not MPI:
                 msg = f"MPI is not active but num_par_fd = {self._num_par_fd}. No parallel " \
-                      f"finite difference will be performed."
+                          f"finite difference will be performed."
                 issue_warning(msg, prefix=self.msginfo, category=MPIWarning)
 
         self.comm = comm
@@ -576,12 +566,11 @@ class Group(System):
                     proc_info, len(allsubs), comm)
             except ProcAllocationError as err:
                 if err.sub_inds is None:
-                    raise RuntimeError("%s: %s" % (self.msginfo, err.msg))
+                    raise RuntimeError(f"{self.msginfo}: {err.msg}")
                 else:
-                    raise RuntimeError("%s: MPI process allocation failed: %s for the following "
-                                       "subsystems: %s" %
-                                       (self.msginfo, err.msg,
-                                        [allsubs[i].system.name for i in err.sub_inds]))
+                    raise RuntimeError(
+                        f"{self.msginfo}: MPI process allocation failed: {err.msg} for the following subsystems: {[allsubs[i].system.name for i in err.sub_inds]}"
+                    )
 
             self._subsystems_myproc = [allsubs[ind].system for ind in sub_inds]
 
@@ -627,7 +616,7 @@ class Group(System):
             self._problem_meta['parallel_groups'] = sorted(full)
 
         if self._problem_meta['parallel_groups']:
-            prefix = self.pathname + '.' if self.pathname else ''
+            prefix = f'{self.pathname}.' if self.pathname else ''
             for par in self._problem_meta['parallel_groups']:
                 if par.startswith(prefix) and par != prefix:
                     self._contains_parallel_group = True
@@ -668,14 +657,13 @@ class Group(System):
         list
             List of all states.
         """
-        if MPI and self.comm.size > 1:
-            all_states = set()
-            byproc = self.comm.allgather(self._list_states())
-            for proc_states in byproc:
-                all_states.update(proc_states)
-            return sorted(all_states)
-        else:
+        if not MPI or self.comm.size <= 1:
             return self._list_states()
+        all_states = set()
+        byproc = self.comm.allgather(self._list_states())
+        for proc_states in byproc:
+            all_states.update(proc_states)
+        return sorted(all_states)
 
     def _setup(self, comm, mode, prob_meta):
         """

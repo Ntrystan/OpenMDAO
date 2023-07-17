@@ -137,9 +137,10 @@ class InterpND(object):
             msg = "Argument 'method' should be a string."
             raise ValueError(msg)
         elif method not in INTERP_METHODS:
-            all_m = ', '.join(['"' + m + '"' for m in INTERP_METHODS])
-            raise ValueError('Interpolation method "%s" is not defined. Valid methods are '
-                             '%s.' % (method, all_m))
+            all_m = ', '.join([f'"{m}"' for m in INTERP_METHODS])
+            raise ValueError(
+                f'Interpolation method "{method}" is not defined. Valid methods are {all_m}.'
+            )
 
         self.extrapolate = extrapolate
 
@@ -160,7 +161,7 @@ class InterpND(object):
                 if not np.all(np.diff(p) > 0.):
                     raise ValueError("The points in dimension %d must be strictly "
                                      "ascending" % i)
-                if not np.asarray(p).ndim == 1:
+                if np.asarray(p).ndim != 1:
                     raise ValueError("The points in dimension %d must be "
                                      "1-dimensional" % i)
 
@@ -188,7 +189,7 @@ class InterpND(object):
                                  "dimensions" % (len(points), values.ndim))
 
             if (method.startswith('scipy') or method == 'akima') and \
-               (np.iscomplexobj(values[:]) or np.any(np.iscomplex(points[0]))):
+                   (np.iscomplexobj(values[:]) or np.any(np.iscomplex(points[0]))):
                 msg = f"Interpolation method '{method}' does not support complex points or values."
                 raise ValueError(msg)
 
@@ -198,16 +199,16 @@ class InterpND(object):
                     raise ValueError("There are %d points and %d values in "
                                      "dimension %d" % (len(p), values.shape[i], i))
 
-        self.grid = tuple([np.asarray(p) for p in points])
+        self.grid = tuple(np.asarray(p) for p in points)
         self.values = values
         self.x_interp = x_interp
 
-        self._xi = None
         self._d_dx = None
         self._d_dvalues = None
         self._compute_d_dvalues = False
         self._compute_d_dx = True
 
+        self._xi = None
         # Cache spline coefficients.
         interp = INTERP_METHODS[method]
 
@@ -243,27 +244,23 @@ class InterpND(object):
         self.table._compute_d_dx = compute_derivative
         self.table._compute_d_dvalues = False
 
-        if isinstance(x, np.ndarray):
-            if len(x.shape) < 2:
-                if len(self.grid) > 1:
-                    # Input is an array containing multi-D coordinates of a single point.
-                    x = np.atleast_2d(x)
-                else:
-                    # Input is an array of separate points on a 1D table.
-                    x = np.atleast_2d(x).T
-        else:
-            # Input is a list or tuple of separate points.
+        if (
+            isinstance(x, np.ndarray)
+            and len(x.shape) < 2
+            and len(self.grid) > 1
+            or not isinstance(x, np.ndarray)
+        ):
+            # Input is an array containing multi-D coordinates of a single point.
             x = np.atleast_2d(x)
-
+        elif len(x.shape) < 2:
+            # Input is an array of separate points on a 1D table.
+            x = np.atleast_2d(x).T
         # cache latest evaluation point for gradient method's use later
         self._xi = x
 
         xnew = self._interpolate(x)
 
-        if compute_derivative:
-            return xnew, self._d_dx
-        else:
-            return xnew
+        return (xnew, self._d_dx) if compute_derivative else xnew
 
     def evaluate_spline(self, values, compute_derivative=False):
         """
@@ -298,13 +295,12 @@ class InterpND(object):
             # Not vectorized, so drop the extra dimension.
             result = result.ravel()
 
-        if compute_derivative:
-            d_dvalues = self.spline_gradient()
-            if d_dvalues.shape[0] == 1:
-                d_dvalues = d_dvalues[0]
-            return result, d_dvalues
-        else:
+        if not compute_derivative:
             return result
+        d_dvalues = self.spline_gradient()
+        if d_dvalues.shape[0] == 1:
+            d_dvalues = d_dvalues[0]
+        return result, d_dvalues
 
     def _interpolate(self, xi):
         """
@@ -515,29 +511,24 @@ class InterpND(object):
         if self.table._vectorized:
             return self.table.training_gradients(pt)
 
-        else:
-            grid = self.grid
-            interp = self._interp
-            opts = self._interp_options
+        grid = self.grid
+        interp = self._interp
+        opts = self._interp_options
 
-            for i, axis in enumerate(grid):
-                ngrid = axis.size
-                values = np.zeros(ngrid)
-                deriv_i = np.zeros(ngrid)
+        for i, axis in enumerate(grid):
+            ngrid = axis.size
+            values = np.zeros(ngrid)
+            deriv_i = np.zeros(ngrid)
 
-                for j in range(ngrid):
-                    values[j] = 1.0
-                    table = interp([grid[i]], values, interp, **opts)
-                    table._compute_d_dvalues = False
-                    deriv_i[j], _, _, _ = table.evaluate(pt[i:i + 1])
-                    values[j] = 0.0
+            for j in range(ngrid):
+                values[j] = 1.0
+                table = interp([grid[i]], values, interp, **opts)
+                table._compute_d_dvalues = False
+                deriv_i[j], _, _, _ = table.evaluate(pt[i:i + 1])
+                values[j] = 0.0
 
-                if i == 0:
-                    deriv_running = deriv_i.copy()
-                else:
-                    deriv_running = np.outer(deriv_running, deriv_i)
-
-            return deriv_running
+            deriv_running = deriv_i.copy() if i == 0 else np.outer(deriv_running, deriv_i)
+        return deriv_running
 
     def spline_gradient(self):
         """

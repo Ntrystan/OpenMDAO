@@ -262,7 +262,7 @@ class TestInterpNDSemiPython(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 interp = InterpNDSemi(grid, values, method=method)
 
-            msg = 'There are {} points in a data dimension, but method'.format(k)
+            msg = f'There are {k} points in a data dimension, but method'
             self.assertTrue(str(cm.exception).startswith(msg))
 
     def test_NaN_exception(self):
@@ -437,7 +437,7 @@ class TestInterpNDPython(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 interp = InterpND(method=method, points=points, values=values)
 
-            msg = 'There are {} points in a data dimension, but method'.format(k)
+            msg = f'There are {k} points in a data dimension, but method'
             self.assertTrue(str(cm.exception).startswith(msg))
 
     def test_spline_single_dim(self):

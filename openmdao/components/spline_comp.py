@@ -92,8 +92,10 @@ class SplineComp(ExplicitComponent):
         if x_cp_val is not None:
 
             if interp_method == 'bsplines':
-                msg = "{}: 'x_cp_val' is not a valid option when using method 'bsplines'. "
-                msg += "Set 'num_cp' instead."
+                msg = (
+                    "{}: 'x_cp_val' is not a valid option when using method 'bsplines'. "
+                    + "Set 'num_cp' instead."
+                )
                 raise ValueError(msg.format(self.msginfo))
 
             if n_cp is not None:
@@ -135,7 +137,7 @@ class SplineComp(ExplicitComponent):
             row = np.repeat(np.arange(n_interp), n_cp)
             col = np.tile(np.arange(n_cp), n_interp)
             rows = np.tile(row, vec_size) + \
-                np.repeat(n_interp * np.arange(vec_size), n_interp * n_cp)
+                    np.repeat(n_interp * np.arange(vec_size), n_interp * n_cp)
             cols = np.tile(col, vec_size) + np.repeat(n_cp * np.arange(vec_size), n_interp * n_cp)
 
             self.declare_partials(y_interp_name, y_cp_name, rows=rows, cols=cols)
