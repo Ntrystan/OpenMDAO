@@ -220,10 +220,7 @@ def _get_tangents(vals, direction, coloring=None, argnums=None, trans=None):
     tuple of ndarray or ndarray
         The tangents values to be passed to vmap.
     """
-    if argnums is None:
-        leaves = vals
-    else:
-        leaves = [vals[i] for i in argnums]
+    leaves = vals if argnums is None else [vals[i] for i in argnums]
     sizes = [np.size(a) for a in leaves]
     inds = np.cumsum(sizes[:-1])
     if coloring is None:
@@ -234,8 +231,10 @@ def _get_tangents(vals, direction, coloring=None, argnums=None, trans=None):
         tangent = coloring.tangent_matrix(direction, trans=trans)
 
     shapes = [tangent.shape[:1] + np.shape(v) for v in leaves]
-    tangents = tuple([np.reshape(a, shp) for a, shp in zip(np.split(tangent, inds, axis=1),
-                                                           shapes)])
+    tangents = tuple(
+        np.reshape(a, shp)
+        for a, shp in zip(np.split(tangent, inds, axis=1), shapes)
+    )
     if len(leaves) == 1:
         tangents = tangents[0]
 

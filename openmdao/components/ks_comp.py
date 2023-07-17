@@ -36,7 +36,7 @@ def check_option(option, value):
     ValueError
     """
     if option == 'units' and value is not None and not valid_units(value):
-        raise ValueError("The units '%s' are invalid." % value)
+        raise ValueError(f"The units '{value}' are invalid.")
 
 
 class KSfunction(object):
@@ -89,9 +89,7 @@ class KSfunction(object):
         """
         g_max, g_diff, exponents, summation = KSfunction._compute_values(g, rho)
 
-        KS = g_max + 1.0 / rho * np.log(summation)
-
-        return KS
+        return g_max + 1.0 / rho * np.log(summation)
 
     @staticmethod
     def derivatives(g, rho=50.0):

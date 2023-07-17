@@ -152,7 +152,7 @@ class InterpBSplines(InterpAlgorithm):
                 i0 = num_cp - order
             else:
                 for ind in range(order, num_cp + 1):
-                    if (knots[ind - 1].real <= t.real) and (t.real < knots[ind].real):
+                    if knots[ind - 1].real <= t.real < knots[ind].real:
                         i0 = ind - order
                         break
 
@@ -176,7 +176,7 @@ class InterpBSplines(InterpAlgorithm):
 
                     if knots[n + ll - 1] != knots[n - 1]:
                         basis[j - 1] = (t - knots[n - 1]) / \
-                            (knots[n + ll - 1] - knots[n - 1]) * basis[j - 1]
+                                (knots[n + ll - 1] - knots[n - 1]) * basis[j - 1]
 
                     else:
                         basis[j - 1] = 0.
@@ -187,7 +187,7 @@ class InterpBSplines(InterpAlgorithm):
                 n = i0 + j2
                 if knots[n + ll - 1] != knots[n - 1]:
                     basis[j2 - 1] = (t - knots[n - 1]) / \
-                        (knots[n + ll - 1] - knots[n - 1]) * basis[j2 - 1]
+                            (knots[n + ll - 1] - knots[n - 1]) * basis[j2 - 1]
 
                 else:
                     basis[j2 - 1] = 0.

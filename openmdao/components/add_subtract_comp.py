@@ -71,26 +71,22 @@ class AddSubtractComp(ExplicitComponent):
         """
         super().__init__()
 
-        # Add systems is used to store those systems provided upon initialization
-        self._equations = []
-
         # Input names will store the names of inputs and their key properties which must be
         # the same across all equations in which they are used.
         self._input_names = {}
 
+        self._equations = []
         if isinstance(output_name, str):
             self.add_equation(output_name, input_names, vec_size, length, val,
                               scaling_factors=scaling_factors, **kwargs)
         elif isinstance(output_name, Iterable):
-            raise NotImplementedError(self.msginfo + ': Declaring multiple addition systems '
-                                      'on initiation is not implemented.'
-                                      'Use a string to name a single addition relationship or use '
-                                      'multiple add_output calls')
-        elif output_name is None:
-            pass
-        else:
-            raise ValueError(self.msginfo + ": first argument to adder init must be either of "
-                             "type `str' or 'None'")
+            raise NotImplementedError(
+                f'{self.msginfo}: Declaring multiple addition systems on initiation is not implemented.Use a string to name a single addition relationship or use multiple add_output calls'
+            )
+        elif output_name is not None:
+            raise ValueError(
+                f"{self.msginfo}: first argument to adder init must be either of type `str' or 'None'"
+            )
 
         self._no_check_partials = True
 
@@ -173,11 +169,7 @@ class AddSubtractComp(ExplicitComponent):
             raise ValueError(self.msginfo + ': Scaling factors list needs to be same length '
                              'as input names')
 
-        if length == 1:
-            shape = (vec_size,)
-        else:
-            shape = (vec_size, length)
-
+        shape = (vec_size, ) if length == 1 else (vec_size, length)
         super().add_output(output_name, val, shape=shape, **kwargs)
 
         self._equations.append((output_name, input_names, vec_size, length, val,
@@ -185,25 +177,29 @@ class AddSubtractComp(ExplicitComponent):
 
         for i, input_name in enumerate(input_names):
             if input_name not in self._input_names:
-                self.add_input(input_name, shape=shape, units=units,
-                               desc=desc + '_inp_' + input_name)
+                self.add_input(
+                    input_name,
+                    shape=shape,
+                    units=units,
+                    desc=f'{desc}_inp_{input_name}',
+                )
             else:
                 # Verify that the input is consistent with that added for a previous equation
                 prev_vec_size = self._input_names[input_name]['vec_size']
                 prev_length = self._input_names[input_name]['length']
                 prev_units = self._input_names[input_name]['units']
                 if vec_size != prev_vec_size:
-                    raise ValueError(self.msginfo + f': Input {input_name} was added in a previous '
-                                                    f'equation but had a different vec_size '
-                                                    f'({prev_vec_size} vs. {vec_size}.')
+                    raise ValueError(
+                        f'{self.msginfo}: Input {input_name} was added in a previous equation but had a different vec_size ({prev_vec_size} vs. {vec_size}.'
+                    )
                 if length != prev_length:
-                    raise ValueError(self.msginfo + f': Input {input_name} was added in a previous '
-                                                    f'equation but had a different length '
-                                                    f'({prev_length} vs. {length}.')
+                    raise ValueError(
+                        f'{self.msginfo}: Input {input_name} was added in a previous equation but had a different length ({prev_length} vs. {length}.'
+                    )
                 if units != prev_units:
-                    raise ValueError(self.msginfo + f': Input {input_name} was added in a previous '
-                                                    f'equation but had different units '
-                                                    f'({prev_units} vs. {units}.')
+                    raise ValueError(
+                        f'{self.msginfo}: Input {input_name} was added in a previous equation but had different units ({prev_units} vs. {units}.'
+                    )
 
             sf = scaling_factors[i]
             self.declare_partials([output_name], [input_name],
@@ -237,16 +233,8 @@ class AddSubtractComp(ExplicitComponent):
 
             if scaling_factors is None:
                 scaling_factors = np.ones(len(input_names))
-            if length == 1:
-                shape = (vec_size,)
-            else:
-                shape = (vec_size, length)
-
-            if complexify:
-                temp = np.zeros(shape, dtype=complex)
-            else:
-                temp = np.zeros(shape)
-
+            shape = (vec_size, ) if length == 1 else (vec_size, length)
+            temp = np.zeros(shape, dtype=complex) if complexify else np.zeros(shape)
             for i, input_name in enumerate(input_names):
                 sf = scaling_factors[i]
                 temp = temp + inputs[input_name] * sf

@@ -1,6 +1,7 @@
 """
 Base class for interpolation methods that work on a semi-structured grid.
 """
+
 import numpy as np
 
 from openmdao.components.interp_util.interp_akima import InterpAkimaSemi
@@ -17,7 +18,7 @@ INTERP_METHODS = {
     'akima': InterpAkimaSemi,
 }
 
-TABLE_METHODS = [method for method in INTERP_METHODS.keys()]
+TABLE_METHODS = list(INTERP_METHODS.keys())
 
 
 class InterpNDSemi(object):
@@ -76,9 +77,10 @@ class InterpNDSemi(object):
             msg = "Argument 'method' should be a string."
             raise ValueError(msg)
         elif method not in INTERP_METHODS:
-            all_m = ', '.join(['"' + m + '"' for m in INTERP_METHODS])
-            raise ValueError('Interpolation method "%s" is not defined. Valid methods are '
-                             '%s.' % (method, all_m))
+            all_m = ', '.join([f'"{m}"' for m in INTERP_METHODS])
+            raise ValueError(
+                f'Interpolation method "{method}" is not defined. Valid methods are {all_m}.'
+            )
 
         if hasattr(values, 'dtype') and hasattr(values, 'astype'):
             if not np.issubdtype(values.dtype, np.inexact):
@@ -88,18 +90,18 @@ class InterpNDSemi(object):
             raise ValueError(f"There are {len(points)} point arrays, but {len(values)} values.")
 
         if np.iscomplexobj(values[:]):
-            msg = "Interpolation method '%s' does not support complex values." % method
+            msg = f"Interpolation method '{method}' does not support complex values."
             raise ValueError(msg)
 
         self.grid = points
         self.values = values
         self.extrapolate = extrapolate
 
-        self._xi = None
         self._d_dx = None
         self._d_dvalues = None
         self._compute_d_dvalues = False
 
+        self._xi = None
         # Cache spline coefficients.
         interp = INTERP_METHODS[method]
 
@@ -131,10 +133,7 @@ class InterpNDSemi(object):
         """
         xnew = self._interpolate(x)
 
-        if compute_derivative:
-            return xnew, self._d_dx
-        else:
-            return xnew
+        return (xnew, self._d_dx) if compute_derivative else xnew
 
     def _interpolate(self, xi):
         """

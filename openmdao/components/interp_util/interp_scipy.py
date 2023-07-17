@@ -286,9 +286,7 @@ class InterpScipy(InterpAlgorithm):
         """
         local_interp = _make_interp_spline(x, y, k=k, axis=0)
         values = local_interp(pt)
-        local_derivs = None
-        if compute_gradients:
-            local_derivs = local_interp(pt, 1)
+        local_derivs = local_interp(pt, 1) if compute_gradients else None
         return values, local_derivs
 
     def training_gradients(self, pt):
@@ -308,9 +306,5 @@ class InterpScipy(InterpAlgorithm):
         for i, axis in enumerate(self.grid):
             e_i = np.eye(axis.size)
             interp = _make_interp_spline(axis, e_i, k=self._ki[i], axis=0)
-            if i == 0:
-                val = interp(pt[i])
-            else:
-                val = np.outer(val, interp(pt[i]))
-
+            val = interp(pt[i]) if i == 0 else np.outer(val, interp(pt[i]))
         return val

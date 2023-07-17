@@ -47,7 +47,7 @@ def check_option(option, value):
     ValueError
     """
     if option == 'units' and value is not None and not valid_units(value):
-        raise ValueError("The units '%s' are invalid." % value)
+        raise ValueError(f"The units '{value}' are invalid.")
 
 
 def array_idx_iter(shape):
@@ -63,8 +63,7 @@ def array_idx_iter(shape):
     ------
     int
     """
-    for p in product(*[range(s) for s in shape]):
-        yield p
+    yield from product(*[range(s) for s in shape])
 
 
 class ExecComp(ExplicitComponent):
@@ -211,11 +210,9 @@ class ExecComp(ExplicitComponent):
                               x={'val': numpy.ones(10, dtype=float),
                                  'units': 'ft'})
         """
-        options = {}
-        for name in _disallowed_names:
-            if name in kwargs:
-                options[name] = kwargs.pop(name)
-
+        options = {
+            name: kwargs.pop(name) for name in _disallowed_names if name in kwargs
+        }
         super().__init__(**options)
 
         # change default coloring values
@@ -394,41 +391,36 @@ class ExecComp(ExplicitComponent):
 
             if arg not in allvars:
                 msg = f"{self.msginfo}: arg '{arg}' in call to ExecComp() " \
-                      f"does not refer to any variable in the expressions {exprs}"
+                          f"does not refer to any variable in the expressions {exprs}"
                 if arg in ('promotes', 'promotes_inputs', 'promotes_outputs'):
                     msg += ". Did you intend to promote variables in the 'add_subsystem' call?"
                 raise RuntimeError(msg)
 
             if isinstance(val, dict):
-                diff = set(val.keys()) - _allowed_meta
-                if diff:
-                    raise RuntimeError("%s: the following metadata names were not "
-                                       "recognized for variable '%s': %s" %
-                                       (self.msginfo, arg, sorted(diff)))
+                if diff := set(val.keys()) - _allowed_meta:
+                    raise RuntimeError(
+                        f"{self.msginfo}: the following metadata names were not recognized for variable '{arg}': {sorted(diff)}"
+                    )
 
                 kwargs2[arg] = val.copy()
 
                 if units is not None:
                     if 'units' in val and val['units'] != units:
-                        raise RuntimeError("%s: units of '%s' have been specified for "
-                                           "variable '%s', but units of '%s' have been "
-                                           "specified for the entire component." %
-                                           (self.msginfo, val['units'], arg, units))
+                        raise RuntimeError(
+                            f"{self.msginfo}: units of '{val['units']}' have been specified for variable '{arg}', but units of '{units}' have been specified for the entire component."
+                        )
                     else:
                         kwargs2[arg]['units'] = units
 
                 if shape is not None:
                     if 'shape' in val and val['shape'] != shape:
-                        raise RuntimeError("%s: shape of %s has been specified for "
-                                           "variable '%s', but shape of %s has been "
-                                           "specified for the entire component." %
-                                           (self.msginfo, val['shape'], arg, shape))
+                        raise RuntimeError(
+                            f"{self.msginfo}: shape of {val['shape']} has been specified for variable '{arg}', but shape of {shape} has been specified for the entire component."
+                        )
                     elif 'val' in val and np.atleast_1d(val['val']).shape != shape:
-                        raise RuntimeError("%s: value of shape %s has been specified for "
-                                           "variable '%s', but shape of %s has been "
-                                           "specified for the entire component." %
-                                           (self.msginfo, np.atleast_1d(val['val']).shape,
-                                            arg, shape))
+                        raise RuntimeError(
+                            f"{self.msginfo}: value of shape {np.atleast_1d(val['val']).shape} has been specified for variable '{arg}', but shape of {shape} has been specified for the entire component."
+                        )
                     else:
                         init_vals[arg] = np.ones(shape)
 
@@ -446,10 +438,9 @@ class ExecComp(ExplicitComponent):
                     if arg not in init_vals:
                         init_vals[arg] = np.ones(val['shape'])
                     elif np.atleast_1d(init_vals[arg]).shape != val['shape']:
-                        raise RuntimeError("%s: shape of %s has been specified for variable "
-                                           "'%s', but a value of shape %s has been provided." %
-                                           (self.msginfo, str(val['shape']), arg,
-                                            str(np.atleast_1d(init_vals[arg]).shape)))
+                        raise RuntimeError(
+                            f"{self.msginfo}: shape of {str(val['shape'])} has been specified for variable '{arg}', but a value of shape {str(np.atleast_1d(init_vals[arg]).shape)} has been provided."
+                        )
                     del kwargs2[arg]['shape']
             else:
                 init_vals[arg] = val
@@ -466,11 +457,7 @@ class ExecComp(ExplicitComponent):
                 'shape_by_conn': shape_by_conn})
 
             # if user supplied an initial value, use it, otherwise set to 1.0
-            if var in init_vals:
-                val = init_vals[var]
-            else:
-                val = 1.0
-
+            val = init_vals.get(var, 1.0)
             if var in var_rel2meta:
                 # Input/Output already exists, but we may be setting defaults for the first time.
                 # Note that there is only one submitted dictionary of defaults.
@@ -485,14 +472,12 @@ class ExecComp(ExplicitComponent):
                     # val is normally ensured to be a numpy array in add_input/add_output,
                     # do the same here...
                     current_meta['val'] = np.atleast_1d(new_val)
+            elif var in outs:
+                current_meta = self.add_output(var, val, **meta)
             else:
-                # new input and/or output.
-                if var in outs:
-                    current_meta = self.add_output(var, val, **meta)
-                else:
-                    if 'constant' in meta:
-                        meta.pop('constant', None)
-                    current_meta = self.add_input(var, val, **meta)
+                if 'constant' in meta:
+                    meta.pop('constant', None)
+                current_meta = self.add_input(var, val, **meta)
 
             if var not in init_vals:
                 init_vals[var] = current_meta['val']
@@ -549,13 +534,17 @@ class ExecComp(ExplicitComponent):
             try:
                 compiled.append(compile(expr, expr, 'exec'))
             except Exception:
-                raise RuntimeError("%s: failed to compile expression '%s'." %
-                                   (self.msginfo, exprs[i]))
+                raise RuntimeError(
+                    f"{self.msginfo}: failed to compile expression '{exprs[i]}'."
+                )
         return compiled
 
     def _parse_for_out_vars(self, s):
-        vnames = set([x.strip() for x in re.findall(VAR_RGX, s)
-                      if not x.endswith('(') and not x.startswith('.')])
+        vnames = {
+            x.strip()
+            for x in re.findall(VAR_RGX, s)
+            if not x.endswith('(') and not x.startswith('.')
+        }
         for v in vnames:
             if v in _expr_dict:
                 raise NameError("%s: cannot assign to variable '%s' "
@@ -565,23 +554,20 @@ class ExecComp(ExplicitComponent):
 
     def _parse_for_names(self, s):
         names = [x.strip() for x in re.findall(VAR_RGX, s) if not x.startswith('.')]
-        vnames = set()
-        for n in names:
-            if n.endswith('('):
-                continue
-            vnames.add(n)
+        vnames = {n for n in names if not n.endswith('(')}
         fnames = [n[:-1] for n in names if n[-1] == '(']
         to_remove = []
         for v in vnames:
             if v in _disallowed_names:
-                raise NameError("%s: cannot use variable name '%s' because "
-                                "it's a reserved keyword." % (self.msginfo, v))
+                raise NameError(
+                    f"{self.msginfo}: cannot use variable name '{v}' because it's a reserved keyword."
+                )
             if v in _expr_dict:
                 expvar = _expr_dict[v]
                 if callable(expvar):
-                    raise NameError("%s: cannot use '%s' as a variable because "
-                                    "it's already defined as an internal "
-                                    "function or constant." % (self.msginfo, v))
+                    raise NameError(
+                        f"{self.msginfo}: cannot use '{v}' as a variable because it's already defined as an internal function or constant."
+                    )
                 else:
                     to_remove.append(v)
 
@@ -661,8 +647,8 @@ class ExecComp(ExplicitComponent):
         """
         Check that all partials are declared.
         """
-        has_diag_partials = self.options['has_diag_partials']
         if not self._manual_decl_partials:
+            has_diag_partials = self.options['has_diag_partials']
             if self.options['do_coloring'] and not has_diag_partials:
                 rank = self.comm.rank
                 sizes = self._var_sizes
@@ -828,8 +814,7 @@ class ExecComp(ExplicitComponent):
                 fdins = set()
 
             for _, (inps, funcs) in self._requires_fd.items():
-                diff = inps.difference(fdins)
-                if diff:
+                if diff := inps.difference(fdins):
                     raise RuntimeError(f"{self.msginfo}: expression contains functions "
                                        f"{sorted(funcs)} that are not complex safe. To fix this, "
                                        f"call declare_partials('*', {sorted(diff)}, method='fd') "
@@ -1215,7 +1200,7 @@ def _import_functs(mod, dct, names=None):
             name, alias = name
         else:
             alias = name
-        if not name[0] == '_':
+        if name[0] != '_':
             dct[name] = getattr(mod, name)
             dct[alias] = dct[name]
 

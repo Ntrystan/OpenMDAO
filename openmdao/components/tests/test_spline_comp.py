@@ -313,8 +313,10 @@ class SplineCompTestCase(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             prob.setup()
 
-        msg = "'interp' <class SplineComp>: 'x_cp_val' is not a valid option when using method 'bsplines'. "
-        msg += "Set 'num_cp' instead."
+        msg = (
+            "'interp' <class SplineComp>: 'x_cp_val' is not a valid option when using method 'bsplines'. "
+            + "Set 'num_cp' instead."
+        )
         self.assertEqual(str(cm.exception), msg)
 
         prob = om.Problem()

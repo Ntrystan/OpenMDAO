@@ -27,13 +27,11 @@ def _check_results(testcase, test, error_bound):
     problem = test.problem
     root = problem.model
 
-    expected_values = root.expected_values
-    if expected_values:
+    if expected_values := root.expected_values:
         actual = {key: problem[key] for key in expected_values}
         assert_near_equal(actual, expected_values, 1e-8)
 
-    expected_totals = root.expected_totals
-    if expected_totals:
+    if expected_totals := root.expected_totals:
         # Forward Derivatives Check
         totals = test.compute_totals('fwd')
         assert_near_equal(totals, expected_totals, error_bound)

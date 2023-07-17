@@ -25,8 +25,7 @@ top = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for root, dirs, files in os.walk(top, topdown=True):
     # do not bother looking further down in excluded dirs
     dirs[:] = [d for d in dirs if d not in exclude]
-    for di in dirs:
-            directories.append(os.path.join(root, di))
+    directories.extend(os.path.join(root, di) for di in dirs)
 
 
 class LintAttributesTestCase(unittest.TestCase):
@@ -107,11 +106,7 @@ class LintAttributesTestCase(unittest.TestCase):
                             # this happens e.g. with PETScVector which is None if MPI isn't active
                             continue
                         class_doc = inspect.getdoc(class_)
-                        if class_doc is None:
-                            doc_matches = []
-                        else:
-                            doc_matches = doc_re.findall(class_doc)
-
+                        doc_matches = [] if class_doc is None else doc_re.findall(class_doc)
                         if len(doc_matches) > 1:
                             new_failures.append('multiple Attributes section in docstring')
 
@@ -138,19 +133,24 @@ class LintAttributesTestCase(unittest.TestCase):
                             all_member_vars = set(member_var_re.findall(valid_lines))
 
                             # no 'self.*=' statements in __init__ but there is an Attributes section
-                            if(len(all_member_vars) == 0 and len(doc_matches) == 1):
+                            if not all_member_vars and len(doc_matches) == 1:
                                 new_failures.append('Attributes section not required')
 
                             # there are 'self.*=' statements in __init__ but no Attributes section
-                            if(len(all_member_vars) > 0 and len(doc_matches) == 0):
+                            if all_member_vars and len(doc_matches) == 0:
                                 print(f'{fpath} : Class `{class_name}`... Attributes section '
                                       f'missing but found {len(all_member_vars)} member vars.. '
                                       'will check parent classes')
 
-                            doc_no_attr = sorted([
-                                n for n in doc_varnames_matches - full_member_vars
-                                if not (n.startswith('__') and n.endswith('__'))])
-                            if doc_no_attr:
+                            if doc_no_attr := sorted(
+                                [
+                                    n
+                                    for n in doc_varnames_matches
+                                    - full_member_vars
+                                    if not n.startswith('__')
+                                    or not n.endswith('__')
+                                ]
+                            ):
                                 new_failures.append(f"{fpath} : Class `{class_name}`: {doc_no_attr}"
                                                     " are documented in Attributes section of "
                                                     "docstring but don't exist.")
@@ -164,8 +164,10 @@ class LintAttributesTestCase(unittest.TestCase):
                             #           "parent classes")
 
                             parent_classes = [
-                                c for c in inspect.getmro(class_)
-                                if c.__name__ != 'object' and c.__name__ != class_name]
+                                c
+                                for c in inspect.getmro(class_)
+                                if c.__name__ not in ['object', class_name]
+                            ]
                             if print_info:
                                 print(f'  Parent Classes:{[c.__name__ for c in parent_classes]}')
 
@@ -177,12 +179,11 @@ class LintAttributesTestCase(unittest.TestCase):
                                           'documented in Attributes section of docstring.. '
                                           'checking parent classes')
                                 for pc in parent_classes:
-                                    pc_class_doc = inspect.getdoc(pc)
-                                    if pc_class_doc:
+                                    if pc_class_doc := inspect.getdoc(pc):
                                         pc_doc_matches = doc_re.findall(pc_class_doc)
                                         pc_doc_name_matches = \
-                                            doc_varnames_re.findall(pc_doc_matches[0]) \
-                                                if(len(pc_doc_matches) == 1) else []
+                                                doc_varnames_re.findall(pc_doc_matches[0]) \
+                                                    if(len(pc_doc_matches) == 1) else []
                                         if v in pc_doc_name_matches:
                                             if(print_info): print(f"    Documented member `{v}` in "
                                                                   f"base class `{pc.__name__}`")
@@ -191,14 +192,13 @@ class LintAttributesTestCase(unittest.TestCase):
                                     new_failures.append(
                                         f'Member `{v}` not documented in Attributes section of own '
                                         'class or parent class docstrings')
-                        else:  # no init section
-                            if len(doc_matches) == 0: # no Attributes section
-                                if print_info: print(
-                                    f'    Skipping Class `{class_name}`... missing Attributes '
-                                    'and init')
-                            else:  # one Attributes section
-                                new_failures.append(
-                                    'Attributes section in docstring but no __init__ function')
+                        elif len(doc_matches) == 0: # no Attributes section
+                            if print_info: print(
+                                f'    Skipping Class `{class_name}`... missing Attributes '
+                                'and init')
+                        else:  # one Attributes section
+                            new_failures.append(
+                                'Attributes section in docstring but no __init__ function')
                         if new_failures:
                             failures[f'{fpath}:{class_name}'] = new_failures
 
@@ -206,9 +206,7 @@ class LintAttributesTestCase(unittest.TestCase):
             msg = []
             for key, fails in failures.items():
                 msg.append(key)
-                for failure in fails:
-                    msg.append(f'    {failure}')
-
+                msg.extend(f'    {failure}' for failure in fails)
             msg.append(f'Found {len(msg) - len(failures)} issues in docstrings')
             self.fail('\n'.join(msg))
 

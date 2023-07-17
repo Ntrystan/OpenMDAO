@@ -1,6 +1,7 @@
 """
 Unit tests for the structured metamodel component.
 """
+
 import unittest
 import inspect
 
@@ -359,32 +360,19 @@ g = np.array([
 ])
 
 
+
+
 class SampleMap(object):
-    param_data = []
     np.random.seed(0)
-    param_data.append({'name': 'x',
-                       'units': None,
-                       'default': 0,
-                       'values': x})
-    param_data.append({'name': 'y',
-                       'units': None,
-                       'default': 0,
-                       'values': y})
-    param_data.append({'name': 'z',
-                       'units': None,
-                       'default': 0,
-                       'values': z})
-
-    output_data = []
-    output_data.append({'name': 'f',
-                       'units': None,
-                       'default': 0,
-                       'values': f})
-
-    output_data.append({'name': 'g',
-                       'units': None,
-                       'default': 0,
-                       'values': g})
+    param_data = [
+        {'name': 'x', 'units': None, 'default': 0, 'values': x},
+        {'name': 'y', 'units': None, 'default': 0, 'values': y},
+        {'name': 'z', 'units': None, 'default': 0, 'values': z},
+    ]
+    output_data = [
+        {'name': 'f', 'units': None, 'default': 0, 'values': f},
+        {'name': 'g', 'units': None, 'default': 0, 'values': g},
+    ]
 
 
 @use_tempdirs

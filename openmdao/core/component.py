@@ -50,9 +50,7 @@ def _valid_var_name(name):
     global _forbidden_chars, _whitespace
     if not name:
         return False
-    if _forbidden_chars.intersection(name):
-        return False
-    return name is name.strip()
+    return False if _forbidden_chars.intersection(name) else name is name.strip()
 
 
 class Component(System):
@@ -180,10 +178,11 @@ class Component(System):
         """
         super()._setup_procs(pathname, comm, mode, prob_meta)
 
-        if self._num_par_fd > 1:
-            if comm.size > 1:
+        if comm.size > 1:
+            if self._num_par_fd > 1:
                 comm = self._setup_par_fd_procs(comm)
-            elif not MPI:
+        elif not MPI:
+            if self._num_par_fd > 1:
                 issue_warning(f"MPI is not active but num_par_fd = {self._num_par_fd}. No parallel "
                               "finite difference will be performed.",
                               prefix=self.msginfo, category=MPIWarning)
@@ -209,11 +208,7 @@ class Component(System):
                                             meta['copy_shape'] is not None):
                 meta['shape'] = None
                 if not isscalar(meta['val']):
-                    if meta['val'].size > 0:
-                        meta['val'] = meta['val'].flatten()[0]
-                    else:
-                        meta['val'] = 1.0
-
+                    meta['val'] = meta['val'].flatten()[0] if meta['val'].size > 0 else 1.0
         self._var_rel2meta.update(self._static_var_rel2meta)
         for io in ['input', 'output']:
             self._var_rel_names[io].extend(self._static_var_rel_names[io])
@@ -270,7 +265,7 @@ class Component(System):
         abs2prom = self._var_allprocs_abs2prom = self._var_abs2prom
 
         # Compute the prefix for turning rel/prom names into abs names
-        prefix = self.pathname + '.'
+        prefix = f'{self.pathname}.'
 
         for io in ['input', 'output']:
             abs2meta = self._var_abs2meta[io]
@@ -291,7 +286,7 @@ class Component(System):
                 }
                 if is_input and 'src_indices' in metadata:
                     allprocs_abs2meta[abs_name]['has_src_indices'] = \
-                        metadata['src_indices'] is not None
+                            metadata['src_indices'] is not None
 
             for prom_name, val in self._var_discrete[io].items():
                 abs_name = prefix + prom_name
@@ -351,9 +346,13 @@ class Component(System):
         # resetting the value of num_par_fd (because the comm has already been split and possibly
         # used by the system setup).
         orig_comm = self._full_comm if self._full_comm is not None else self.comm
-        if self._num_par_fd > 1 and orig_comm.size > 1 and not (self._owns_approx_jac or
-                                                                self._approx_schemes):
-            raise RuntimeError("%s: num_par_fd is > 1 but no FD is active." % self.msginfo)
+        if (
+            self._num_par_fd > 1
+            and orig_comm.size > 1
+            and not self._owns_approx_jac
+            and not self._approx_schemes
+        ):
+            raise RuntimeError(f"{self.msginfo}: num_par_fd is > 1 but no FD is active.")
 
         for key, dct in self._declared_partials.items():
             of, wrt = key
@@ -432,8 +431,9 @@ class Component(System):
 
         # error if nothing matched
         if not matches_rel:
-            raise ValueError("{}: Invalid 'wrt' variable(s) specified for colored approx partial "
-                             "options: {}.".format(self.msginfo, wrt_patterns))
+            raise ValueError(
+                f"{self.msginfo}: Invalid 'wrt' variable(s) specified for colored approx partial options: {wrt_patterns}."
+            )
 
         info['wrt_matches_rel'] = matches_rel
         info['wrt_matches'] = [rel_name2abs_name(self, n) for n in matches_rel]
@@ -453,7 +453,7 @@ class Component(System):
             A nested dict of the form dct[of][wrt] = (rows, cols, shape)
         """
         # sparsity uses relative names, so we need to convert to absolute
-        prefix = self.pathname + '.'
+        prefix = f'{self.pathname}.'
         for of, sub in sparsity.items():
             of = prefix + of
             for wrt, tup in sub.items():
@@ -501,19 +501,21 @@ class Component(System):
         """
         # First, type check all arguments
         if not isinstance(name, str):
-            raise TypeError('%s: The name argument should be a string.' % self.msginfo)
+            raise TypeError(f'{self.msginfo}: The name argument should be a string.')
         if not _valid_var_name(name):
-            raise NameError("%s: '%s' is not a valid input name." % (self.msginfo, name))
+            raise NameError(f"{self.msginfo}: '{name}' is not a valid input name.")
 
         if not isscalar(val) and not isinstance(val, _allowed_types):
-            raise TypeError('%s: The val argument should be a float, list, tuple, ndarray or '
-                            'Iterable' % self.msginfo)
+            raise TypeError(
+                f'{self.msginfo}: The val argument should be a float, list, tuple, ndarray or Iterable'
+            )
         if shape is not None and not isinstance(shape, (Integral, tuple, list)):
-            raise TypeError("%s: The shape argument should be an int, tuple, or list but "
-                            "a '%s' was given" % (self.msginfo, type(shape)))
+            raise TypeError(
+                f"{self.msginfo}: The shape argument should be an int, tuple, or list but a '{type(shape)}' was given"
+            )
         if units is not None:
             if not isinstance(units, str):
-                raise TypeError('%s: The units argument should be a str or None.' % self.msginfo)
+                raise TypeError(f'{self.msginfo}: The units argument should be a str or None.')
             units = simplify_unit(units, msginfo=self.msginfo)
 
         if tags is not None and not isinstance(tags, (str, list)):
@@ -521,10 +523,9 @@ class Component(System):
 
         if (shape_by_conn or copy_shape):
             if shape is not None or ndim(val) > 0:
-                raise ValueError("%s: If shape is to be set dynamically using 'shape_by_conn' or "
-                                 "'copy_shape', 'shape' and 'val' should be a scalar, "
-                                 "but shape of '%s' and val of '%s' was given for variable '%s'."
-                                 % (self.msginfo, shape, val, name))
+                raise ValueError(
+                    f"{self.msginfo}: If shape is to be set dynamically using 'shape_by_conn' or 'copy_shape', 'shape' and 'val' should be a scalar, but shape of '{shape}' and val of '{val}' was given for variable '{name}'."
+                )
         else:
             # value, shape: based on args, making sure they are compatible
             val, shape = ensure_compatible(name, val, shape)
@@ -538,22 +539,21 @@ class Component(System):
             # using ._dict below to avoid tons of deprecation warnings
             distributed = distributed or self.options._dict['distributed']['val']
 
-        metadata = {}
-
-        metadata.update({
-            'val': val,
-            'shape': shape,
-            'size': shape_to_len(shape),
-            'src_indices': None,
-            'flat_src_indices': None,
-            'units': units,
-            'desc': desc,
-            'distributed': distributed,
-            'tags': make_set(tags),
-            'shape_by_conn': shape_by_conn,
-            'copy_shape': copy_shape,
-        })
-
+        metadata = dict(
+            {
+                'val': val,
+                'shape': shape,
+                'size': shape_to_len(shape),
+                'src_indices': None,
+                'flat_src_indices': None,
+                'units': units,
+                'desc': desc,
+                'distributed': distributed,
+                'tags': make_set(tags),
+                'shape_by_conn': shape_by_conn,
+                'copy_shape': copy_shape,
+            }
+        )
         # this will get reset later if comm size is 1
         self._has_distrib_vars |= metadata['distributed']
 
@@ -566,7 +566,7 @@ class Component(System):
 
         # Disallow dupes
         if name in var_rel2meta:
-            raise ValueError("{}: Variable name '{}' already exists.".format(self.msginfo, name))
+            raise ValueError(f"{self.msginfo}: Variable name '{name}' already exists.")
 
         var_rel2meta[name] = metadata
         var_rel_names['input'].append(name)
@@ -598,23 +598,22 @@ class Component(System):
         """
         # First, type check all arguments
         if not isinstance(name, str):
-            raise TypeError('%s: The name argument should be a string.' % self.msginfo)
+            raise TypeError(f'{self.msginfo}: The name argument should be a string.')
         if not _valid_var_name(name):
-            raise NameError("%s: '%s' is not a valid input name." % (self.msginfo, name))
+            raise NameError(f"{self.msginfo}: '{name}' is not a valid input name.")
         if tags is not None and not isinstance(tags, (str, list)):
-            raise TypeError('%s: The tags argument should be a str or list' % self.msginfo)
+            raise TypeError(f'{self.msginfo}: The tags argument should be a str or list')
 
-        metadata = {}
-
-        metadata.update({
-            'val': val,
-            'type': type(val),
-            'desc': desc,
-            'tags': make_set(tags),
-        })
-
+        metadata = dict(
+            {
+                'val': val,
+                'type': type(val),
+                'desc': desc,
+                'tags': make_set(tags),
+            }
+        )
         if metadata['type'] == np.ndarray:
-            metadata.update({'shape': val.shape})
+            metadata['shape'] = val.shape
 
         if self._static_mode:
             var_rel2meta = self._static_var_rel2meta
@@ -623,7 +622,7 @@ class Component(System):
 
         # Disallow dupes
         if name in var_rel2meta:
-            raise ValueError("{}: Variable name '{}' already exists.".format(self.msginfo, name))
+            raise ValueError(f"{self.msginfo}: Variable name '{name}' already exists.")
 
         var_rel2meta[name] = self._var_discrete['input'][name] = metadata
 
@@ -694,28 +693,28 @@ class Component(System):
 
         # First, type check all arguments
         if (shape_by_conn or copy_shape) and (shape is not None or ndim(val) > 0):
-            raise ValueError("%s: If shape is to be set dynamically using 'shape_by_conn' or "
-                             "'copy_shape', 'shape' and 'val' should be scalar, "
-                             "but shape of '%s' and val of '%s' was given for variable '%s'."
-                             % (self.msginfo, shape, val, name))
+            raise ValueError(
+                f"{self.msginfo}: If shape is to be set dynamically using 'shape_by_conn' or 'copy_shape', 'shape' and 'val' should be scalar, but shape of '{shape}' and val of '{val}' was given for variable '{name}'."
+            )
 
         if not isinstance(name, str):
-            raise TypeError('%s: The name argument should be a string.' % self.msginfo)
+            raise TypeError(f'{self.msginfo}: The name argument should be a string.')
         if not _valid_var_name(name):
-            raise NameError("%s: '%s' is not a valid output name." % (self.msginfo, name))
+            raise NameError(f"{self.msginfo}: '{name}' is not a valid output name.")
 
         if shape is not None and not isinstance(shape, (int, tuple, list, np.integer)):
-            raise TypeError("%s: The shape argument should be an int, tuple, or list but "
-                            "a '%s' was given" % (self.msginfo, type(shape)))
+            raise TypeError(
+                f"{self.msginfo}: The shape argument should be an int, tuple, or list but a '{type(shape)}' was given"
+            )
         if res_units is not None:
             if not isinstance(res_units, str):
-                msg = '%s: The res_units argument should be a str or None' % self.msginfo
+                msg = f'{self.msginfo}: The res_units argument should be a str or None'
                 raise TypeError(msg)
             res_units = simplify_unit(res_units, msginfo=self.msginfo)
 
         if units is not None:
             if not isinstance(units, str):
-                raise TypeError('%s: The units argument should be a str or None' % self.msginfo)
+                raise TypeError(f'{self.msginfo}: The units argument should be a str or None')
             units = simplify_unit(units, msginfo=self.msginfo)
 
         if tags is not None and not isinstance(tags, (str, set, list)):
@@ -775,26 +774,27 @@ class Component(System):
             # using ._dict below to avoid tons of deprecation warnings
             distributed = distributed or self.options._dict['distributed']['val']
 
-        metadata = {}
-
-        metadata.update({
-            'val': val,
-            'shape': shape,
-            'size': shape_to_len(shape),
-            'units': units,
-            'res_units': res_units,
-            'desc': desc,
-            'distributed': distributed,
-            'tags': make_set(tags),
-            'ref': format_as_float_or_array('ref', ref, flatten=True),
-            'ref0': format_as_float_or_array('ref0', ref0, flatten=True),
-            'res_ref': format_as_float_or_array('res_ref', res_ref, flatten=True, val_if_none=None),
-            'lower': lower,
-            'upper': upper,
-            'shape_by_conn': shape_by_conn,
-            'copy_shape': copy_shape
-        })
-
+        metadata = dict(
+            {
+                'val': val,
+                'shape': shape,
+                'size': shape_to_len(shape),
+                'units': units,
+                'res_units': res_units,
+                'desc': desc,
+                'distributed': distributed,
+                'tags': make_set(tags),
+                'ref': format_as_float_or_array('ref', ref, flatten=True),
+                'ref0': format_as_float_or_array('ref0', ref0, flatten=True),
+                'res_ref': format_as_float_or_array(
+                    'res_ref', res_ref, flatten=True, val_if_none=None
+                ),
+                'lower': lower,
+                'upper': upper,
+                'shape_by_conn': shape_by_conn,
+                'copy_shape': copy_shape,
+            }
+        )
         # this will get reset later if comm size is 1
         self._has_distrib_vars |= metadata['distributed']
         self._has_distrib_outputs |= metadata['distributed']
@@ -809,7 +809,7 @@ class Component(System):
 
         # Disallow dupes
         if name in var_rel2meta:
-            raise ValueError("{}: Variable name '{}' already exists.".format(self.msginfo, name))
+            raise ValueError(f"{self.msginfo}: Variable name '{name}' already exists.")
 
         var_rel2meta[name] = metadata
         var_rel_names['output'].append(name)
@@ -840,23 +840,19 @@ class Component(System):
             Metadata for added variable.
         """
         if not isinstance(name, str):
-            raise TypeError('%s: The name argument should be a string.' % self.msginfo)
+            raise TypeError(f'{self.msginfo}: The name argument should be a string.')
         if not _valid_var_name(name):
-            raise NameError("%s: '%s' is not a valid output name." % (self.msginfo, name))
+            raise NameError(f"{self.msginfo}: '{name}' is not a valid output name.")
         if tags is not None and not isinstance(tags, (str, set, list)):
-            raise TypeError('%s: The tags argument should be a str, set, or list' % self.msginfo)
+            raise TypeError(
+                f'{self.msginfo}: The tags argument should be a str, set, or list'
+            )
 
-        metadata = {}
-
-        metadata.update({
-            'val': val,
-            'type': type(val),
-            'desc': desc,
-            'tags': make_set(tags)
-        })
-
+        metadata = dict(
+            {'val': val, 'type': type(val), 'desc': desc, 'tags': make_set(tags)}
+        )
         if metadata['type'] == np.ndarray:
-            metadata.update({'shape': val.shape})
+            metadata['shape'] = val.shape
 
         if self._static_mode:
             var_rel2meta = self._static_var_rel2meta
@@ -865,7 +861,7 @@ class Component(System):
 
         # Disallow dupes
         if name in var_rel2meta:
-            raise ValueError("{}: Variable name '{}' already exists.".format(self.msginfo, name))
+            raise ValueError(f"{self.msginfo}: Variable name '{name}' already exists.")
 
         var_rel2meta[name] = self._var_discrete['output'][name] = metadata
 

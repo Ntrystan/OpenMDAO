@@ -20,11 +20,11 @@ if __name__ == '__main__':
 
     resid_V = 0.0
     n_in = int(next(file_contents))
-    for i in range(n_in):
+    for _ in range(n_in):
         resid_V += float(next(file_contents))
 
     n_out = int(next(file_contents))
-    for i in range(n_out):
+    for _ in range(n_out):
         resid_V -= float(next(file_contents))
 
     with open(output_filename, 'w') as output_file:

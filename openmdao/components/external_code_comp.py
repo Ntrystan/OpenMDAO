@@ -75,28 +75,25 @@ class ExternalCodeDelegate(object):
         # check for the command
         comp = self._comp
 
-        cmd = [c for c in comp.options['command'] if c.strip()]
-        if not cmd:
-            logger.error("The command cannot be empty")
-        else:
+        if cmd := [c for c in comp.options['command'] if c.strip()]:
             program_to_execute = comp.options['command'][0]
             if sys.platform == 'win32':
                 if not which(program_to_execute):
-                    missing = self._check_for_files([program_to_execute])
-                    if missing:
-                        logger.error("The command to be executed, '%s', "
-                                     "cannot be found" % program_to_execute)
-            else:
-                if not which(program_to_execute):
-                    logger.error("The command to be executed, '%s', "
-                                 "cannot be found" % program_to_execute)
+                    if missing := self._check_for_files([program_to_execute]):
+                        logger.error(
+                            f"The command to be executed, '{program_to_execute}', cannot be found"
+                        )
+            elif not which(program_to_execute):
+                logger.error(
+                    f"The command to be executed, '{program_to_execute}', cannot be found"
+                )
 
-        # Check for missing input files. This just generates a warning during
-        # setup, since these files may be generated later during execution.
-        missing = self._check_for_files(comp.options['external_input_files'])
-        if missing:
-            logger.warning("The following input files are missing at setup "
-                           "time: %s" % missing)
+        else:
+            logger.error("The command cannot be empty")
+        if missing := self._check_for_files(comp.options['external_input_files']):
+            logger.warning(
+                f"The following input files are missing at setup time: {missing}"
+            )
 
     def _check_for_files(self, files):
         """
@@ -135,23 +132,18 @@ class ExternalCodeDelegate(object):
         if not command:
             raise ValueError('Empty command list')
 
-        if comp.options['fail_hard']:
-            err_class = RuntimeError
-        else:
-            err_class = AnalysisError
-
+        err_class = RuntimeError if comp.options['fail_hard'] else AnalysisError
         return_code = None
 
         try:
-            missing = self._check_for_files(comp.options['external_input_files'])
-            if missing:
-                raise err_class("The following input files are missing: %s"
-                                % sorted(missing))
+            if missing := self._check_for_files(
+                comp.options['external_input_files']
+            ):
+                raise err_class(f"The following input files are missing: {sorted(missing)}")
             return_code, error_msg = self._execute_local(command)
 
             if return_code is None:
-                raise AnalysisError('Timed out after %s sec.' %
-                                    comp.options['timeout'])
+                raise AnalysisError(f"Timed out after {comp.options['timeout']} sec.")
 
             elif return_code not in comp.options['allowed_return_codes']:
                 if isinstance(comp.stderr, str):
@@ -167,10 +159,10 @@ class ExternalCodeDelegate(object):
                 raise err_class('return_code = %d%s' % (return_code,
                                                         err_fragment))
 
-            missing = self._check_for_files(comp.options['external_output_files'])
-            if missing:
-                raise err_class("The following output files are missing: %s"
-                                % sorted(missing))
+            if missing := self._check_for_files(
+                comp.options['external_output_files']
+            ):
+                raise err_class(f"The following output files are missing: {sorted(missing)}")
 
         finally:
             comp.return_code = -999999 if return_code is None else return_code
@@ -201,28 +193,28 @@ class ExternalCodeDelegate(object):
 
         if sys.platform == 'win32':
             if not which(program_to_execute):
-                missing = self._check_for_files([program_to_execute])
-                if missing:
-                    raise ValueError("The command to be executed, '%s', "
-                                     "cannot be found" % program_to_execute)
+                if missing := self._check_for_files([program_to_execute]):
+                    raise ValueError(
+                        f"The command to be executed, '{program_to_execute}', cannot be found"
+                    )
             if isinstance(command, list):
                 command_for_shell_proc = ['cmd.exe', '/c'] + command
             else:
-                command_for_shell_proc = 'cmd.exe /c ' + str(command)
+                command_for_shell_proc = f'cmd.exe /c {str(command)}'
 
-        else:
-            if not which(program_to_execute):
-                raise ValueError("The command to be executed, '%s', "
-                                 "cannot be found" % program_to_execute)
+        elif which(program_to_execute):
             command_for_shell_proc = command
 
+        else:
+            raise ValueError("The command to be executed, '%s', "
+                             "cannot be found" % program_to_execute)
         comp._process = \
-            ShellProc(command_for_shell_proc, comp.stdin,
+                ShellProc(command_for_shell_proc, comp.stdin,
                       comp.stdout, comp.stderr, comp.options['env_vars'])
 
         try:
             return_code, error_msg = \
-                comp._process.wait(comp.options['poll_delay'], comp.options['timeout'])
+                    comp._process.wait(comp.options['poll_delay'], comp.options['timeout'])
         finally:
             comp._process.close_files()
             comp._process = None
@@ -389,8 +381,7 @@ class ExternalCodeImplicitComp(ImplicitComponent):
         residuals : Vector
             Unscaled, dimensional residuals written to via residuals[key].
         """
-        command = self.options['command_apply']
-        if command:
+        if command := self.options['command_apply']:
             self._external_code_runner.run_component(command=command)
 
     def solve_nonlinear(self, inputs, outputs):
@@ -404,6 +395,5 @@ class ExternalCodeImplicitComp(ImplicitComponent):
         outputs : Vector
             Unscaled, dimensional output variables read via outputs[key].
         """
-        command = self.options['command_solve']
-        if command:
+        if command := self.options['command_solve']:
             self._external_code_runner.run_component(command=command)

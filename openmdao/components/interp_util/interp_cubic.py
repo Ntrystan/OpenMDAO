@@ -67,11 +67,7 @@ class InterpCubic(InterpAlgorithm):
         n = len(grid)
 
         # Complex Step
-        if values.dtype == complex:
-            dtype = values.dtype
-        else:
-            dtype = x.dtype
-
+        dtype = values.dtype if values.dtype == complex else x.dtype
         # Natural spline has second deriv=0 at both ends
         sec_deriv = np.zeros(n, dtype=dtype)
         temp = np.zeros(values.shape, dtype=dtype)

@@ -44,24 +44,25 @@ class _ConfigInfo(object):
         # if this group on any proc has local modified descendant systems that are parallel groups,
         # this information needs to be known on all procs so that local parallel groups can
         # be marked as modified if they have any modified descendants, even remote ones.
-        if group.comm.size > 1 and group._contains_parallel_group:
-            mod_pars = set()
-            if self._modified_systems:
-                prefix = group.pathname + '.' if group.pathname else ''
-                our_pars = [p for p in group._problem_meta['parallel_groups']
-                            if p.startswith(prefix)]
-                for par in our_pars:
-                    pre = par + '.'
-                    for spath in self._modified_systems:
-                        if spath.startswith(pre):
-                            mod_pars.add(par)
-                            break
+        if group.comm.size <= 1 or not group._contains_parallel_group:
+            return
+        mod_pars = set()
+        if self._modified_systems:
+            prefix = f'{group.pathname}.' if group.pathname else ''
+            our_pars = [p for p in group._problem_meta['parallel_groups']
+                        if p.startswith(prefix)]
+            for par in our_pars:
+                pre = f'{par}.'
+                for spath in self._modified_systems:
+                    if spath.startswith(pre):
+                        mod_pars.add(par)
+                        break
 
-            all_mods = group.comm.allgather(mod_pars)
+        all_mods = group.comm.allgather(mod_pars)
 
-            for mods in all_mods:
-                for mod in mods:
-                    self._modified_systems.update(all_ancestors(mod))
+        for mods in all_mods:
+            for mod in mods:
+                self._modified_systems.update(all_ancestors(mod))
 
     def _var_added(self, comp_path, vname):
         self._modified_systems.update(all_ancestors(comp_path))

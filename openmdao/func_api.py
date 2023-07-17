@@ -197,14 +197,13 @@ class OMWrappedFunc(object):
             Keyword args to store.
         """
         if name in self._inputs:
-            if 'resid' in kwargs:
-                self._inputs[name]['resid'] = kwargs['resid']
-                if 'val' in kwargs:
-                    self._inputs[name]['shape'] = np.asarray(kwargs['val']).shape
-                elif 'shape' in kwargs:
-                    self._inputs[name]['shape'] = kwargs['shape']
-            else:
+            if 'resid' not in kwargs:
                 raise RuntimeError(f"In add_output, '{name}' already registered as an input.")
+            self._inputs[name]['resid'] = kwargs['resid']
+            if 'val' in kwargs:
+                self._inputs[name]['shape'] = np.asarray(kwargs['val']).shape
+            elif 'shape' in kwargs:
+                self._inputs[name]['shape'] = kwargs['shape']
         if name in self._outputs:
             raise RuntimeError(f"In add_output, '{name}' already registered as an output.")
         _check_kwargs(kwargs, _allowed_add_output_args, 'add_output')
@@ -416,11 +415,7 @@ class OMWrappedFunc(object):
             if meta.get('is_option'):
                 continue
 
-            if name in outs:  # skip if this is a state
-                defaults = self._output_defaults
-            else:
-                defaults = self._input_defaults
-
+            defaults = self._output_defaults if name in outs else self._input_defaults
             self._default_to_shape(name, meta, defaults)
             _update_from_defaults(meta, defaults)
 
@@ -601,11 +596,7 @@ class OMWrappedFunc(object):
             meta['val'] = defaults_dict['val']
 
         if meta.get('shape') is None:
-            if valshape is not None:
-                meta['shape'] = valshape
-            else:
-                meta['shape'] = defaults_dict['shape']
-
+            meta['shape'] = valshape if valshape is not None else defaults_dict['shape']
         meta['shape'] = _shape2tuple(meta['shape'])
         if not valshape:  # val is a scalar so reshape with the given meta['shape']
             meta['val'] = np.ones(meta['shape']) * meta['val']
@@ -630,9 +621,7 @@ def wrap(func):
     OMwrappedFunc
         The wrapped function object.
     """
-    if isinstance(func, OMWrappedFunc):
-        return func
-    return OMWrappedFunc(func)
+    return func if isinstance(func, OMWrappedFunc) else OMWrappedFunc(func)
 
 
 def _update_from_defaults(meta, defaults):
@@ -683,8 +672,7 @@ def _check_kwargs(kwargs, allowed, fname):
     fname : str
         Function name (for error reporting).
     """
-    errs = [n for n in kwargs if n not in allowed]
-    if errs:
+    if errs := [n for n in kwargs if n not in allowed]:
         raise RuntimeError(f"In {fname}, metadata names {errs} are not allowed.")
 
 
@@ -702,9 +690,7 @@ def _shape2tuple(shape):
     tuple
         The shape as a tuple.
     """
-    if isinstance(shape, Number):
-        return (shape,)
-    return tuple(shape)
+    return (shape, ) if isinstance(shape, Number) else tuple(shape)
 
 
 @contextmanager

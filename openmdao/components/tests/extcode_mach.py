@@ -25,12 +25,8 @@ def mach_residual(mach, area_ratio_target):
 
 def mach_solve(area_ratio, super_sonic=False):
     """Solve for mach, given area ratio"""
-    if super_sonic:
-        initial_guess = 4
-    else:
-        initial_guess = .1
-    mach = fsolve(func=mach_residual, x0=initial_guess, args=(area_ratio,))[0]
-    return mach
+    initial_guess = 4 if super_sonic else .1
+    return fsolve(func=mach_residual, x0=initial_guess, args=(area_ratio,))[0]
 
 if __name__ == '__main__':
     import sys

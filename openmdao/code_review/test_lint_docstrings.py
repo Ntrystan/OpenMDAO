@@ -40,8 +40,7 @@ top = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 for root, dirs, files in os.walk(top, topdown=True):
     dirs[:] = [d for d in dirs if d not in exclude]
-    for di in dirs:
-        directories.append(os.path.join(root, di))
+    directories.extend(os.path.join(root, di) for di in dirs)
 
 
 def _is_context_manager(func):
@@ -112,7 +111,7 @@ class ReturnFinder(ast.NodeVisitor):
         if hasattr(node, 'body') and isinstance(node.body, Iterable):
             # If the top level function does nothing but pass, note it.
             if is_func_def and self._depth == 2 and len(node.body) <= 2 \
-                     and isinstance(node.body[-1], ast.Pass):
+                         and isinstance(node.body[-1], ast.Pass):
                 self.passes = True
             # Recurse through subnodes
             for subnode in node.body:
@@ -123,18 +122,19 @@ class ReturnFinder(ast.NodeVisitor):
             for subnode in node.orelse:
                 self.visit(subnode)
 
-        # If we're in a context manager top-level function, ignore its return
-        if is_func_def and self._func_depth == 1 \
-                and hasattr(node, 'decorator_list') and node.decorator_list:
-            try:
-                wrapper = node.body[0].value.func.id
-                if 'ContextManager' in wrapper:
-                    self.is_context_manager = True
-            except AttributeError:
-                pass
-
-        # Reduce function_depth on exit if this is a FunctionDef
         if is_func_def:
+            if (
+                self._func_depth == 1
+                and hasattr(node, 'decorator_list')
+                and node.decorator_list
+            ):
+                try:
+                    wrapper = node.body[0].value.func.id
+                    if 'ContextManager' in wrapper:
+                        self.is_context_manager = True
+                except AttributeError:
+                    pass
+
             self._func_depth -= 1
 
         self._depth -= 1
@@ -247,11 +247,11 @@ class LintTestCase(unittest.TestCase):
 
         # Do require documentation of *args and **kwargs
         if argspec.varargs:
-            arg_set |= {'*' + argspec.varargs}
+            arg_set |= {f'*{argspec.varargs}'}
         if argspec.varkw:
-            arg_set |= {'**' + argspec.varkw}
+            arg_set |= {f'**{argspec.varkw}'}
 
-        if len(arg_set) >= 1:
+        if arg_set:
             if not numpy_doc_string['Parameters']:
                 new_failures.append('does not have a Parameters section')
                 #self.fail(fail_msg + '... does not have a Parameters section')
@@ -269,22 +269,19 @@ class LintTestCase(unittest.TestCase):
                 if type_ == '':
                     new_failures.append('no type info given for '
                                         'Parameter {0}'.format(name))
-                if desc == '':
+                if not desc:
                     new_failures.append('no description given for '
                                          'Parameter {0}'.format(name))
 
-            documented_arg_set = set(item[0] for item in
-                                     numpy_doc_string['Parameters'])
+            documented_arg_set = {
+                item[0] for item in numpy_doc_string['Parameters']
+            }
 
-            # Arguments that aren't documented
-            undocumented = arg_set - documented_arg_set
-            if undocumented:
+            if undocumented := arg_set - documented_arg_set:
                 new_failures.append('missing documentation for: '
                                      '{0}'.format(str(list(undocumented))))
 
-            # Arguments that are documented but don't exist
-            overdocumented = documented_arg_set - arg_set
-            if overdocumented:
+            if overdocumented := documented_arg_set - arg_set:
                 new_failures.append('documents nonexisting parameters: '
                                      '{0}'.format(str(list(overdocumented))))
 
@@ -336,7 +333,7 @@ class LintTestCase(unittest.TestCase):
         elif f.has_return and not doc_returns:
             new_failures.append('method returns value(s) but found '
                                 'no \'Returns\' section in docstring')
-        elif f.has_return and doc_returns:
+        elif f.has_return:
             # Check formatting
             for (name, typ, desc) in doc_returns:
                 if name_required and not name:
@@ -523,7 +520,7 @@ class LintTestCase(unittest.TestCase):
             # Loop over files
             for file_name in sorted(os.listdir(dirpath)):
                 if not file_name.startswith("_") and file_name[-3:] == '.py' \
-                   and not os.path.isdir(file_name):
+                       and not os.path.isdir(file_name):
 
                     # To construct module name, remove part of abs path that
                     # precedes 'openmdao', and then replace '/' with '.' in the remainder.
@@ -553,7 +550,7 @@ class LintTestCase(unittest.TestCase):
                         except:
                             continue
 
-                        failures.update(self._failure_dict(full_class_path, result))
+                        failures |= self._failure_dict(full_class_path, result)
 
                         clss = getattr(mod, class_name)
 

@@ -134,7 +134,7 @@ class ImplicitFuncComp(ImplicitComponent):
                 kwargs = omf._filter_dict(meta, omf._allowed_add_input_args)
                 self.add_input(name, **kwargs)
 
-        for i, (name, meta) in enumerate(self._apply_nonlinear_func.get_output_meta()):
+        for name, meta in self._apply_nonlinear_func.get_output_meta():
             _check_var_name(self, name)
             kwargs = _copy_with_ignore(meta, omf._allowed_add_output_args, ignore=('resid',))
             self.add_output(name, **kwargs)
@@ -241,41 +241,41 @@ class ImplicitFuncComp(ImplicitComponent):
         if self._mode == 'rev':  # use reverse mode to compute derivs
             outvals = tuple(self._outputs.values())
             tangents = self._get_tangents(outvals, 'rev', coloring)
-            if coloring is not None:
+            if coloring is None:
+                j = []
+                for a in jac_reverse(self._apply_nonlinear_func_jax, argnums, tangents)(*invals):
+                    a = np.asarray(a)
+                    a = (
+                        a.reshape((a.size, 1))
+                        if a.ndim < 2
+                        else a.reshape((a.shape[0], shape_to_len(a.shape[1:])))
+                    )
+                    j.append(a)
+                j = np.hstack(self._reorder_col_chunks(j)).reshape((osize, isize))
+            else:
                 j = [np.asarray(a).reshape((a.shape[0], shape_to_len(a.shape[1:])))
                      for a in jac_reverse(self._apply_nonlinear_func_jax, argnums,
                                           tangents)(*invals)]
                 j = coloring.expand_jac(np.hstack(self._reorder_col_chunks(j)), 'rev')
-            else:
-                j = []
-                for a in jac_reverse(self._apply_nonlinear_func_jax, argnums, tangents)(*invals):
-                    a = np.asarray(a)
-                    if a.ndim < 2:
-                        a = a.reshape((a.size, 1))
-                    else:
-                        a = a.reshape((a.shape[0], shape_to_len(a.shape[1:])))
-                    j.append(a)
-                j = np.hstack(self._reorder_col_chunks(j)).reshape((osize, isize))
+        elif coloring is not None:
+            tangents = self._get_tangents(invals, 'fwd', coloring, argnums,
+                                          trans=self._get_jac2func_inds(self._inputs,
+                                                                        self._outputs))
+            j = [np.asarray(a).reshape((shape_to_len(a.shape[:-1]), a.shape[-1]))
+                 for a in jac_forward(self._apply_nonlinear_func_jax, argnums,
+                                      tangents)(*invals)]
+            j = coloring.expand_jac(np.vstack(j), 'fwd')
         else:
-            if coloring is not None:
-                tangents = self._get_tangents(invals, 'fwd', coloring, argnums,
-                                              trans=self._get_jac2func_inds(self._inputs,
-                                                                            self._outputs))
-                j = [np.asarray(a).reshape((shape_to_len(a.shape[:-1]), a.shape[-1]))
-                     for a in jac_forward(self._apply_nonlinear_func_jax, argnums,
-                                          tangents)(*invals)]
-                j = coloring.expand_jac(np.vstack(j), 'fwd')
-            else:
-                tangents = self._get_tangents(invals, 'fwd', coloring, argnums)
-                j = []
-                for a in jac_forward(self._apply_nonlinear_func_jax, argnums, tangents)(*invals):
-                    a = np.asarray(a)
-                    if a.ndim < 2:
-                        a = a.reshape((1, a.size))
-                    else:
-                        a = a.reshape((shape_to_len(a.shape[:-1]), a.shape[-1]))
-                    j.append(a)
-                j = self._reorder_cols(np.vstack(j).reshape((osize, isize)))
+            tangents = self._get_tangents(invals, 'fwd', coloring, argnums)
+            j = []
+            for a in jac_forward(self._apply_nonlinear_func_jax, argnums, tangents)(*invals):
+                a = np.asarray(a)
+                if a.ndim < 2:
+                    a = a.reshape((1, a.size))
+                else:
+                    a = a.reshape((shape_to_len(a.shape[:-1]), a.shape[-1]))
+                j.append(a)
+            j = self._reorder_cols(np.vstack(j).reshape((osize, isize)))
 
         self._jacobian.set_dense_jac(self, j)
 

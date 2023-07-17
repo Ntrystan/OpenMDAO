@@ -151,7 +151,9 @@ class MetaModelUnStructuredComp(ExplicitComponent):
         surrogate_input_names.append((name, input_size))
 
         train_name = f'train_{name}'
-        self.options.declare(train_name, default=None, desc='Training data for %s' % name)
+        self.options.declare(
+            train_name, default=None, desc=f'Training data for {name}'
+        )
         if training_data is not None:
             self.options[train_name] = training_data
 
@@ -209,7 +211,9 @@ class MetaModelUnStructuredComp(ExplicitComponent):
             metadata['default_surrogate'] = True
 
         train_name = f'train_{name}'
-        self.options.declare(train_name, default=None, desc='Training data for %s' % name)
+        self.options.declare(
+            train_name, default=None, desc=f'Training data for {name}'
+        )
 
         if training_data is not None:
             self.options[train_name] = training_data
@@ -271,15 +275,19 @@ class MetaModelUnStructuredComp(ExplicitComponent):
                 'dependent': True,
             }
             # Dense specification of partials for non-vectorized models.
-            self._declare_partials(of=tuple([name[0] for name in self._surrogate_output_names]),
-                                   wrt=tuple([name[0] for name in self._surrogate_input_names]),
-                                   dct=dct)
+            self._declare_partials(
+                of=tuple(name[0] for name in self._surrogate_output_names),
+                wrt=tuple(name[0] for name in self._surrogate_input_names),
+                dct=dct,
+            )
 
         # Support for user declaring fd partials in a child class and assigning new defaults.
         # We want a warning for all partials that were not explicitly declared.
-        declared_partials = set([
-            key for key, dct in self._subjacs_info.items() if 'method' in dct
-            and dct['method']])
+        declared_partials = {
+            key
+            for key, dct in self._subjacs_info.items()
+            if 'method' in dct and dct['method']
+        }
 
         # Gather undeclared fd partials on surrogates that don't support analytic derivatives.
         # While we do this, declare the missing ones.
@@ -298,11 +306,7 @@ class MetaModelUnStructuredComp(ExplicitComponent):
         if non_declared_partials:
             self._get_approx_scheme('fd')
 
-            msg = "Because the MetaModelUnStructuredComp '{}' uses a surrogate " \
-                  "which does not define a linearize method,\nOpenMDAO will use " \
-                  "finite differences to compute derivatives. Some of the derivatives " \
-                  "will be computed\nusing default finite difference " \
-                  "options because they were not explicitly declared.\n".format(self.name)
+            msg = f"Because the MetaModelUnStructuredComp '{self.name}' uses a surrogate which does not define a linearize method,\nOpenMDAO will use finite differences to compute derivatives. Some of the derivatives will be computed\nusing default finite difference options because they were not explicitly declared.\n"
             msg += "The derivatives computed using the defaults are:\n"
             for abs_key in non_declared_partials:
                 msg += "    {}, {}\n".format(*abs_key)
@@ -325,7 +329,7 @@ class MetaModelUnStructuredComp(ExplicitComponent):
                 surrogate = self._metadata(name).get('surrogate')
                 if surrogate is None:
                     no_sur.append(name)
-            if len(no_sur) > 0:
+            if no_sur:
                 msg = ("No default surrogate model is defined and the following"
                        " outputs do not have a surrogate model:\n%s\n"
                        "Either specify a default_surrogate, or specify a "
@@ -530,14 +534,13 @@ class MetaModelUnStructuredComp(ExplicitComponent):
                             j2 = j1 + out_size * sz
                             partials[out_name, in_name][j1:j2] = derivs[:, idx:idx + sz].flat
                             idx += sz
-            else:
-                if overrides_method('linearize', surrogate, SurrogateModel):
-                    sjac = surrogate.linearize(flat_inputs)
+            elif overrides_method('linearize', surrogate, SurrogateModel):
+                sjac = surrogate.linearize(flat_inputs)
 
-                    idx = 0
-                    for in_name, sz in self._surrogate_input_names:
-                        partials[(out_name, in_name)] = sjac[:, idx:idx + sz]
-                        idx += sz
+                idx = 0
+                for in_name, sz in self._surrogate_input_names:
+                    partials[(out_name, in_name)] = sjac[:, idx:idx + sz]
+                    idx += sz
 
     def _train(self):
         """
@@ -559,7 +562,7 @@ class MetaModelUnStructuredComp(ExplicitComponent):
                                    f"of training points. Expected {num_sample} but found "
                                    f"{len(val)} points for '{name}'.")
 
-        if len(missing_training_data) > 0:
+        if missing_training_data:
             raise RuntimeError(f"{self.msginfo}: The following training data sets must be "
                                f"provided as options: {missing_training_data}")
 

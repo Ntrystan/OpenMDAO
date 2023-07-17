@@ -126,11 +126,11 @@ class LinearSystemComp(ImplicitComponent):
             Unscaled, dimensional output variables read via outputs[key].
         """
         vec_size = self.options['vec_size']
-        vec_size_A = self.vec_size_A
-
         # lu factorization for use with solve_linear
         self._lup = []
         if vec_size > 1:
+            vec_size_A = self.vec_size_A
+
             for j in range(vec_size_A):
                 lhs = inputs['A'][j] if vec_size_A > 1 else inputs['A']
                 self._lup.append(linalg.lu_factor(lhs))
@@ -195,11 +195,10 @@ class LinearSystemComp(ImplicitComponent):
             else:
                 d_outputs['x'] = linalg.lu_solve(self._lup, d_residuals['x'], trans=0)
 
-        else:  # rev
-            if vec_size > 1:
-                for j in range(vec_size):
-                    idx = j if vec_size_A > 1 else 0
-                    d_residuals['x'][j] = linalg.lu_solve(self._lup[idx], d_outputs['x'][j],
-                                                          trans=1)
-            else:
-                d_residuals['x'] = linalg.lu_solve(self._lup, d_outputs['x'], trans=1)
+        elif vec_size > 1:
+            for j in range(vec_size):
+                idx = j if vec_size_A > 1 else 0
+                d_residuals['x'][j] = linalg.lu_solve(self._lup[idx], d_outputs['x'][j],
+                                                      trans=1)
+        else:
+            d_residuals['x'] = linalg.lu_solve(self._lup, d_outputs['x'], trans=1)
